@@ -1,5 +1,6 @@
 import { registerJob } from "./registry";
 import { completePastSchedules, generateVersionPdf, sendScheduleNotifications } from "../services/schedules";
+import { sendRotaReminders } from "../services/rota";
 
 /** Makes the PDF for a newly published version, then queues the notifications. */
 registerJob("schedule.pdf", async (job) => {
@@ -15,4 +16,9 @@ registerJob("schedule.notify", async (job) => {
 
 registerJob("schedule.complete", async (job) => {
   await completePastSchedules(job.orgId!);
+});
+
+registerJob("rota.remind", async (job) => {
+  const { date } = job.payload as { date: string };
+  await sendRotaReminders(job.orgId!, date);
 });

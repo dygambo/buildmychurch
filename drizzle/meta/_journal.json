@@ -106,6 +106,20 @@
       "when": 1792092788524,
       "tag": "0014_memos_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1792094014248,
+      "tag": "0015_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792094015764,
+      "tag": "0016_events_rls",
+      "breakpoints": true
     }
   ]
 }

@@ -7,6 +7,7 @@ import { audit } from "../audit";
 import { naira } from "@/lib/format";
 import { confirmOnlineGift, failOnlineGift } from "./giving";
 import { confirmTopup, failTopup } from "./messaging";
+import { confirmRegistration, failRegistration } from "./events";
 
 type Intent = typeof paymentIntents.$inferSelect;
 type PurposeHandler = {
@@ -20,6 +21,10 @@ const handlers: Record<Intent["purpose"], PurposeHandler | undefined> = {
       await confirmOnlineGift(tx, i.orgId, i.targetId, r);
     },
     failed: async (tx, i) => failOnlineGift(tx, i.targetId),
+  },
+  event: {
+    succeeded: async (tx, i, r) => confirmRegistration(tx, i.orgId, i.targetId, r),
+    failed: async (tx, i) => failRegistration(tx, i.targetId),
   },
   sms_topup: {
     succeeded: async (tx, i) => confirmTopup(tx, i.orgId, i.targetId),

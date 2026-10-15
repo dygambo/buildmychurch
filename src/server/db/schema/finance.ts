@@ -227,7 +227,7 @@ export const paymentIntents = pgTable(
   {
     reference: text("reference").primaryKey(),
     orgId: orgId(),
-    purpose: text("purpose", { enum: ["gift", "sms_topup"] }).notNull(),
+    purpose: text("purpose", { enum: ["gift", "sms_topup", "event"] }).notNull(),
     targetId: uuid("target_id").notNull(),
     amountKobo: kobo("amount_kobo").notNull(),
     email: text("email").notNull(),

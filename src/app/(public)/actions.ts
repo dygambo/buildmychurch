@@ -1,5 +1,8 @@
 "use server";
 import { unsubscribe } from "@/server/services/messaging";
+import { eventToken, failRegistration, registerForEvent, registerSchema } from "@/server/services/events";
+import { respondSchema, respondToSlot } from "@/server/services/rota";
+import { eventRegistrations } from "@/server/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { db, withOrg } from "@/server/db";
@@ -114,6 +117,13 @@ export async function fakePayAction(reference: string, outcome: "pay" | "decline
   if (!i) throw new Error("Unknown payment.");
   await fakeCheckout(reference, outcome);
   if (i.purpose === "sms_topup") redirect(`/messages/wallet?ref=${encodeURIComponent(reference)}`);
+  if (i.purpose === "event") {
+    const token = await withOrg(i.orgId, async (tx) => {
+      const [r] = await tx.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, i.targetId));
+      return eventToken(tx, i.orgId, r!.eventId);
+    });
+    redirect(`/e/${token}/done?reference=${encodeURIComponent(reference)}`);
+  }
   const [o] = await db.select({ slug: organisations.slug }).from(organisations).where(eq(organisations.id, i.orgId));
   redirect(`/give/${o!.slug}/thanks?reference=${encodeURIComponent(reference)}`);
 }
@@ -124,4 +134,43 @@ export async function unsubscribeAction(token: string) {
   if (!(await rateLimit(`unsub:${ip}`, 30, 3600))) throw new Error("Too many attempts. Try again later.");
   await unsubscribe(token);
   redirect(`/u/${encodeURIComponent(token)}?done=1`);
+}
+
+/** Registration from the public event page. Paid tickets go to checkout; free ones straight to the ticket. */
+export async function registerEventAction(input: { token: string; values: Record<string, unknown> }) {
+  return guard(async () => {
+    const ip = await clientIp();
+    if (!(await rateLimit(`event-reg:${ip}`, 20, 3600))) throw new AppError("Too many registrations from this phone in the last hour. Try again later.");
+    const parsed = registerSchema.safeParse(input.values);
+    if (!parsed.success) throw new AppError("Please check the highlighted fields.", zodFieldErrors(parsed.error));
+    const r = await registerForEvent(String(input.token), parsed.data);
+    if (!r.reference) return { url: `/e/${input.token}/t/${r.code}` };
+    try {
+      const { authorizationUrl } = await initializePayment({
+        reference: r.reference,
+        amountKobo: r.amountKobo,
+        email: r.email,
+        callbackUrl: `${env().APP_URL}/e/${input.token}/done`,
+        subaccount: r.subaccount,
+        metadata: { purpose: "event" },
+      });
+      return { url: authorizationUrl };
+    } catch (e) {
+      await db.update(paymentIntents).set({ status: "failed", failureReason: (e as Error).message }).where(eq(paymentIntents.reference, r.reference));
+      const [i] = await db.select().from(paymentIntents).where(eq(paymentIntents.reference, r.reference));
+      if (i) await withOrg(i.orgId, (tx) => failRegistration(tx, i.targetId));
+      throw e;
+    }
+  });
+}
+
+/** A volunteer confirms or declines their rota slot from the link in their message. */
+export async function respondRotaAction(input: Record<string, unknown>) {
+  return guard(async () => {
+    const ip = await clientIp();
+    if (!(await rateLimit(`rota:${ip}`, 30, 3600))) throw new AppError("Too many attempts. Try again later.");
+    const parsed = respondSchema.safeParse(input);
+    if (!parsed.success) throw new AppError("Please check the highlighted fields.", zodFieldErrors(parsed.error));
+    return respondToSlot(parsed.data);
+  });
 }

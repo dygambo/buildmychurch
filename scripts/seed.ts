@@ -28,6 +28,9 @@ import {
 import { givingTransactions, jobs, members, messageCampaigns, messages, scheduleVersions, smsLedger } from "@/server/db/schema";
 import { approveMemo, memoSchema, queryMemo, saveMemo, saveRoute as saveMemoRoute, submitMemo } from "@/server/services/memos";
 import { randomUUID } from "node:crypto";
+import { deskSchema, eventSchema, registerAtDesk, saveEvent, setEventStatus } from "@/server/services/events";
+import { autoFill, fillSchema, sundays } from "@/server/services/rota";
+import { rotaSlots, ticketTypes } from "@/server/db/schema";
 import { groups } from "@/server/db/schema";
 import {
   completePastSchedules,
@@ -450,6 +453,7 @@ async function main() {
   await seedMessaging(r.orgId, row!.u.id);
   await seedSchedules(r.orgId, row!.u.id);
   await seedMemos(r.orgId, row!.u.id);
+  await seedEvents(r.orgId, row!.u.id);
   console.log(`Demo church created with 120 members.\nSign in with ${DEMO.email} / ${DEMO.password}`);
 }
 
@@ -949,6 +953,53 @@ async function seedMemos(orgId: string, ownerId: string) {
     }));
     await submitMemo(tx, finance, m3);
     await queryMemo(tx, secretary, { id: m3, comment: "Please confirm the honorarium and whether he needs accommodation." });
+  });
+}
+
+async function seedEvents(orgId: string, ownerId: string) {
+  const owner = await actorFor(ownerId, orgId);
+  await withOrg(orgId, async (tx) => {
+    const [hq] = await tx.select().from(branches).orderBy(asc(branches.createdAt)).limit(1);
+    const day = (n: number) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+    const conf = await saveEvent(
+      tx,
+      owner,
+      eventSchema.parse({
+        branchId: hq!.id,
+        title: "Youth Conference 2026: Unshaken",
+        description: "Three days of worship, teaching and workshops for young people aged 13 to 35. Lunch is served each day.",
+        startsAt: `${day(21)}T09:00`,
+        endsAt: `${day(23)}T16:00`,
+        venue: "Main auditorium",
+        capacity: "400",
+        tickets: [
+          { name: "Free entry", price: "0", capacity: "" },
+          { name: "Conference pack (T-shirt and notebook)", price: "5000", capacity: "150" },
+        ],
+      }),
+    );
+    await setEventStatus(tx, owner, conf, "published");
+    const [free] = await tx.select().from(ticketTypes).where(eq(ticketTypes.eventId, conf)).orderBy(asc(ticketTypes.position)).limit(1);
+    for (const [name, q] of [["Tobi Adewale", 1], ["Chiamaka Eze", 2], ["Ibrahim Musa", 1]] as const)
+      await registerAtDesk(tx, owner, deskSchema.parse({ eventId: conf, ticketTypeId: free!.id, name, quantity: q, checkIn: false }));
+    await saveEvent(
+      tx,
+      owner,
+      eventSchema.parse({
+        branchId: hq!.id,
+        title: "Couples' Dinner",
+        startsAt: `${day(40)}T18:00`,
+        venue: "Church hall",
+        tickets: [{ name: "Couple", price: "15000", capacity: "60" }],
+      }),
+    );
+
+    const [ushers] = await tx.select().from(groups).where(eq(groups.name, "Ushering"));
+    if (ushers) {
+      await autoFill(tx, owner, fillSchema.parse({ groupId: ushers.id, dates: sundays(day(0), 4), positions: ["Main door", "Gallery", "Car park"], notify: false }));
+      const slots = await tx.select({ id: rotaSlots.id }).from(rotaSlots).where(eq(rotaSlots.groupId, ushers.id)).orderBy(asc(rotaSlots.date)).limit(3);
+      for (const s of slots.slice(0, 2)) await tx.update(rotaSlots).set({ status: "confirmed" }).where(eq(rotaSlots.id, s.id));
+    }
   });
 }
 
