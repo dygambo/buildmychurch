@@ -52,6 +52,11 @@ export async function navBadges(ctx: Ctx): Promise<Badges> {
       const c = await memoCounts(tx, ctx);
       if (c.action + c.pay > 0) out["/memos"] = { count: c.action + c.pay, tone: "accent" };
     }
+    if (ctx.can("care.manage")) {
+      const { careSummary } = await import("./care");
+      const c = await careSummary(tx, ctx);
+      if (c.newPrayer + c.dueCases > 0) out["/care"] = { count: c.newPrayer + c.dueCases, tone: c.dueCases > 0 ? "bad" : "accent" };
+    }
     return out;
   });
 }

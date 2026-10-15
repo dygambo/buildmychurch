@@ -30,6 +30,8 @@ import { approveMemo, memoSchema, queryMemo, saveMemo, saveRoute as saveMemoRout
 import { randomUUID } from "node:crypto";
 import { deskSchema, eventSchema, registerAtDesk, saveEvent, setEventStatus } from "@/server/services/events";
 import { autoFill, fillSchema, sundays } from "@/server/services/rota";
+import { addEntry, addPrayer, caseSchema, entrySchema, markPrayed, prayerLink, prayerSchema, publicPrayerSchema, saveCase, submitPublicPrayer, updatePrayer } from "@/server/services/care";
+import { createForm, getForm, setFormStatus, submitForm } from "@/server/services/forms";
 import { rotaSlots, ticketTypes } from "@/server/db/schema";
 import { groups } from "@/server/db/schema";
 import {
@@ -454,6 +456,7 @@ async function main() {
   await seedSchedules(r.orgId, row!.u.id);
   await seedMemos(r.orgId, row!.u.id);
   await seedEvents(r.orgId, row!.u.id);
+  await seedCare(r.orgId, row!.u.id);
   console.log(`Demo church created with 120 members.\nSign in with ${DEMO.email} / ${DEMO.password}`);
 }
 
@@ -1001,6 +1004,66 @@ async function seedEvents(orgId: string, ownerId: string) {
       for (const s of slots.slice(0, 2)) await tx.update(rotaSlots).set({ status: "confirmed" }).where(eq(rotaSlots.id, s.id));
     }
   });
+}
+
+async function seedCare(orgId: string, ownerId: string) {
+  const owner = await actorFor(ownerId, orgId);
+  const day = (n: number) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  const { link, people, formId } = await withOrg(orgId, async (tx) => {
+    const people = await tx
+      .select({ id: members.id, first: members.firstName, last: members.lastName })
+      .from(members)
+      .where(and(isNull(members.deletedAt), eq(members.stage, "member")))
+      .limit(8);
+    const formId = await createForm(tx, owner, "workers");
+    await setFormStatus(tx, owner, formId, "open");
+    return { link: await prayerLink(tx, owner), people, formId };
+  });
+  const token = link.split("/p/")[1]!;
+  const requests = [
+    { name: "Ngozi Eze", phone: "08035550101", body: "Please pray for my husband's job interview at the bank on Thursday.", category: "career", wantsContact: false },
+    { name: "", body: "Pray for peace in my home. My teenage son has stopped talking to us.", category: "family", wantsContact: false },
+    { name: "Kola Bankole", phone: "08035550102", body: "My mother is in the ICU at LASUTH after a stroke. Please pray and visit if you can.", category: "healing", wantsContact: true },
+    { name: "Esther", email: "esther.prayer@example.com", body: "Thank God with me: I passed my ICAN final exams!", category: "thanksgiving", wantsContact: false },
+    { name: "", body: "A private matter about my health. I'd like to speak with a pastor.", category: "healing", confidential: true, wantsContact: true, email: "private.member@example.com" },
+  ];
+  for (const r of requests) await submitPublicPrayer(token, publicPrayerSchema.parse(r));
+
+  await withOrg(orgId, async (tx) => {
+    const { listPrayer } = await import("@/server/services/care");
+    const list = await listPrayer(tx, owner, { status: "all" });
+    const thanks = list.find((x) => x.category === "thanksgiving");
+    if (thanks) await updatePrayer(tx, owner, { id: thanks.id, status: "answered", testimony: "Passed all papers at first sitting." });
+    const job = list.find((x) => x.category === "career");
+    if (job) {
+      await markPrayed(tx, owner, job.id);
+      await markPrayed(tx, owner, job.id);
+    }
+    await addPrayer(tx, owner, prayerSchema.parse({ memberId: people[2]!.id, body: "Journey mercies for the family travelling to Enugu for the burial.", category: "family" }));
+
+    const hospital = await saveCase(
+      tx,
+      owner,
+      caseSchema.parse({ memberId: people[0]!.id, kind: "hospital", title: "Admitted at LUTH after a road accident", priority: "urgent", assignedTo: ownerId, nextActionOn: day(0), nextAction: "Visit with the welfare team" }),
+    );
+    await addEntry(tx, owner, entrySchema.parse({ caseId: hospital, kind: "visit", body: "Visited with Deaconess Ade. Leg in a cast, in good spirits. Prayed with the family.", happenedOn: day(-2) }));
+    await addEntry(tx, owner, entrySchema.parse({ caseId: hospital, kind: "welfare", welfareKind: "hospital_bill", amount: "120000", body: "Paid directly to the hospital account.", happenedOn: day(-1) }));
+    const burial = await saveCase(
+      tx,
+      owner,
+      caseSchema.parse({ memberId: people[2]!.id, kind: "bereavement", title: "Lost her father; burial in Enugu next month", priority: "high", nextActionOn: day(3), nextAction: "Condolence visit with the elders" }),
+    );
+    await addEntry(tx, owner, entrySchema.parse({ caseId: burial, kind: "call", body: "Called to condole. The family will hold a service of songs at the church.", happenedOn: day(-1) }));
+    await addEntry(tx, owner, entrySchema.parse({ caseId: burial, kind: "welfare", welfareKind: "foodstuff", amount: "35000", body: "Rice, oil and provisions for the wake-keep.", happenedOn: day(0) }));
+    await saveCase(tx, owner, caseSchema.parse({ memberId: people[4]!.id, kind: "new_baby", title: "Welcomed a baby girl", nextActionOn: day(5), nextAction: "Visit with a gift; book the dedication" }));
+  });
+
+  const f = await withOrg(orgId, (tx) => getForm(tx, owner, formId));
+  const ftoken = f.publicUrl!.split("/f/")[1]!;
+  const q = (t: string) => f.fields.find((x) => x.type === t)!.id;
+  const depts = ["Media", "Choir", "Ushering", "Media", "Protocol", "Children's Church"];
+  for (const [i, p] of people.slice(0, 6).entries())
+    await submitForm(ftoken, { [q("short")]: `${p.first} ${p.last}`, [q("phone")]: `0807555${String(1000 + i)}`, [q("choice")]: depts[i], [q("yesno")]: i % 3 ? "Yes" : "No" });
 }
 
 main()

@@ -2,6 +2,8 @@
 import { unsubscribe } from "@/server/services/messaging";
 import { eventToken, failRegistration, registerForEvent, registerSchema } from "@/server/services/events";
 import { respondSchema, respondToSlot } from "@/server/services/rota";
+import { publicPrayerSchema, submitPublicPrayer } from "@/server/services/care";
+import { submitForm } from "@/server/services/forms";
 import { eventRegistrations } from "@/server/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
@@ -172,5 +174,25 @@ export async function respondRotaAction(input: Record<string, unknown>) {
     const parsed = respondSchema.safeParse(input);
     if (!parsed.success) throw new AppError("Please check the highlighted fields.", zodFieldErrors(parsed.error));
     return respondToSlot(parsed.data);
+  });
+}
+
+/** A prayer request from the public prayer page. */
+export async function prayerAction(input: { token: string; values: Record<string, unknown> }) {
+  return guard(async () => {
+    const ip = await clientIp();
+    if (!(await rateLimit(`prayer:${ip}`, 10, 3600))) throw new AppError("Too many requests from this phone in the last hour. Try again later, or speak to an usher.");
+    const parsed = publicPrayerSchema.safeParse(input.values);
+    if (!parsed.success) throw new AppError("Please check the highlighted fields.", zodFieldErrors(parsed.error));
+    return submitPublicPrayer(String(input.token), parsed.data);
+  });
+}
+
+/** A response to a church form. */
+export async function formAction(input: { token: string; answers: Record<string, unknown> }) {
+  return guard(async () => {
+    const ip = await clientIp();
+    if (!(await rateLimit(`form:${ip}`, 30, 3600))) throw new AppError("Too many responses from this phone in the last hour. Try again later.");
+    return submitForm(String(input.token), input.answers ?? {});
   });
 }

@@ -1,3 +1,4 @@
+import { prayerFromVisitorCard } from "./care";
 import { and, asc, count, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Tx } from "../db";
@@ -206,6 +207,8 @@ export async function submitVisitorCard(
       wantsVisit: v.wantsVisit,
     },
   );
+  if (v.prayerRequest)
+    await prayerFromVisitorCard(tx, org.id, { memberId, name: `${v.firstName} ${v.lastName}`, body: v.prayerRequest, wantsContact: v.wantsVisit });
   if (v.prayerRequest && !fu.created)
     await tx.insert(followupNotes).values({
       orgId: org.id,

@@ -6,3 +6,4 @@ export * from "./messaging";
 export * from "./schedules";
 export * from "./memos";
 export * from "./events";
+export * from "./care";
