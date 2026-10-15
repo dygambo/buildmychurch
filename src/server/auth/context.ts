@@ -96,3 +96,16 @@ export async function userOrgs(userId: string) {
     .innerJoin(roles, eq(roles.id, memberships.roleId))
     .where(and(eq(memberships.userId, userId), eq(memberships.status, "active")));
 }
+
+/** Used for records created by the system itself (visitor cards, scheduled jobs), never by a signed-in person. */
+export const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000";
+
+export function systemActor(org: { id: string; name: string }, name: string, perms: Permission[]): Actor {
+  return makeActor({
+    user: { id: SYSTEM_USER_ID, name, email: "", mfaEnabled: false },
+    org: { id: org.id, name: org.name, slug: "", plan: "", smsSenderId: null, timezone: "Africa/Lagos" },
+    membership: { id: "", roleId: "", roleKey: "system", roleName: name, title: null, staffId: null, phone: null },
+    perms: new Set(perms),
+    branchIds: [],
+  });
+}

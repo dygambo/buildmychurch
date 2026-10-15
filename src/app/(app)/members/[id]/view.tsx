@@ -2,7 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Home, MoreHorizontal, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Home, MoreHorizontal, Pencil, Plus, Route, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, Note } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { Dropdown, DropdownContent, DropdownItem, DropdownTrigger } from "@/comp
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { useAction } from "@/components/ui/use-action";
 import { leaveFamilyAction, linkFamilyAction, removeMemberAction, setTagsAction } from "../actions";
+import { startFollowupAction } from "../../follow-up/actions";
 import { MemberDrawer, type MemberFormValues } from "../member-form";
 import { MemberPicker, type Picked } from "../member-picker";
 
@@ -300,5 +301,18 @@ export function FamilyCard({
         )}
       </Dialog>
     </Card>
+  );
+}
+
+export function StartFollowup({ memberId, firstTimer }: { memberId: string; firstTimer: boolean }) {
+  const router = useRouter();
+  const start = useAction(startFollowupAction, { onSuccess: (r) => router.push(`/follow-up?open=${r.id}`) });
+  return (
+    <Button
+      loading={start.pending}
+      onClick={() => start.run({ memberId, reason: firstTimer ? "first_timer" : "other" })}
+    >
+      <Route /> Follow up
+    </Button>
   );
 }

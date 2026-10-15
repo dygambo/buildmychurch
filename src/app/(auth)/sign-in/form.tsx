@@ -11,6 +11,7 @@ export function SignInForm() {
   const { run, pending, fieldErrors } = useAction(signInAction, { onSuccess: (d) => router.replace(d.next) });
   return (
     <form
+      method="post"
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();

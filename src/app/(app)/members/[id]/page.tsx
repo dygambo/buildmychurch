@@ -7,6 +7,7 @@ import { withOrg } from "@/server/db";
 import { getMember } from "@/server/services/members";
 import { listBranches } from "@/server/services/org";
 import { listTags } from "@/server/services/members";
+import { memberAttendance } from "@/server/services/attendance";
 import { AppError } from "@/server/errors";
 import { NoAccess } from "@/components/no-access";
 import { Avatar } from "@/components/ui/avatar";
@@ -15,7 +16,7 @@ import { Card, CardBody, CardHeader, Note } from "@/components/ui/card";
 import { formatDate, formatDateTime, fullName, timeAgo } from "@/lib/format";
 import { formatPhone, localPhone } from "@/lib/phone";
 import { MONTHS, STAGE_LABEL, STAGE_TONE, STATUS_LABEL } from "../labels";
-import { FamilyCard, ProfileActions, TagEditor } from "./view";
+import { FamilyCard, ProfileActions, StartFollowup, TagEditor } from "./view";
 
 export const metadata: Metadata = { title: "Member" };
 
@@ -47,12 +48,13 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
       m: await getMember(tx, ctx, id),
       branches: await listBranches(tx),
       tags: await listTags(tx),
+      att: ctx.can("attendance.read") ? await memberAttendance(tx, id) : null,
     }));
   } catch (e) {
     if (e instanceof AppError) notFound();
     throw e;
   }
-  const { m, branches, tags } = data;
+  const { m, branches, tags, att } = data;
   const name = fullName(m);
   const age = m.dobYear && m.dobMonth && m.dobDay ? ageOn(m.dobYear, m.dobMonth, m.dobDay) : null;
   const wa = m.phone ? `https://wa.me/${m.phone.replace("+", "")}` : null;
@@ -98,6 +100,7 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
               </a>
             </>
           )}
+          {ctx.can("followup.manage") && <StartFollowup memberId={m.id} firstTimer={m.stage === "first_timer"} />}
           {canWrite && (
             <ProfileActions
               member={{
@@ -200,6 +203,34 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
         </div>
 
         <div className="flex flex-col gap-4">
+          {att && (
+            <Card>
+              <CardHeader
+                title="Attendance"
+                action={
+                  <span className="text-[13px] text-muted">
+                    {att.total} service{att.total === 1 ? "" : "s"} in total
+                  </span>
+                }
+              />
+              <CardBody>
+                {att.recent.length ? (
+                  <ul className="flex flex-col gap-1.5 text-[13px]">
+                    {att.recent.slice(0, 6).map((s) => (
+                      <li key={s.id} className="flex justify-between gap-2">
+                        <Link href={`/attendance/${s.id}`} className="truncate hover:text-accent">
+                          {s.name}
+                        </Link>
+                        <span className="shrink-0 text-faint">{formatDate(String(s.date))}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-[13px] text-muted">No attendance recorded yet.</p>
+                )}
+              </CardBody>
+            </Card>
+          )}
           <Card>
             <CardHeader title="Groups" />
             <CardBody>

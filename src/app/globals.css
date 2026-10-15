@@ -140,3 +140,21 @@
     transition: none !important;
   }
 }
+
+/* Printing: only the element marked .print-area is printed (QR tags, pickup slips). */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    inset: 0 auto auto 0;
+  }
+  @page {
+    margin: 10mm;
+  }
+}

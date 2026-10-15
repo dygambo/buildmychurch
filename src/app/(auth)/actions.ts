@@ -1,5 +1,5 @@
 "use server";
-import { headers } from "next/headers";
+import { clientIp } from "@/server/request";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/server/db";
@@ -20,10 +20,7 @@ import { emailLayout, p } from "@/server/emails/layout";
 import { firstName } from "@/lib/format";
 import { env } from "@/server/env";
 
-async function ip() {
-  const h = await headers();
-  return (h.get("x-forwarded-for") ?? "").split(",")[0]?.trim() || h.get("x-real-ip") || "local";
-}
+const ip = clientIp;
 
 const signInSchema = z.object({
   email: z.string().trim().email("Enter a valid email address."),
@@ -87,7 +84,8 @@ export async function signUpAction(input: z.input<typeof signUpSchema>): Promise
   const parsed = signUpSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: "Check the highlighted fields.", fieldErrors: zodFieldErrors(parsed.error) };
-  if (!(await rateLimit(`signup:${await ip()}`, 5, 3600)))
+  // browser tests create many churches from one address; real visitors get 5 an hour
+  if (!(await rateLimit(`signup:${await ip()}`, process.env.E2E_TEST_HOOKS === "1" ? 100 : 5, 3600)))
     return { ok: false, error: "Too many sign-ups from this network. Try again in an hour." };
   try {
     const r = await signUp(parsed.data);

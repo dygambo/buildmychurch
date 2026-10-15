@@ -7,6 +7,9 @@ import { withOrg } from "@/server/db";
 import { branches, memberships } from "@/server/db/schema";
 import { memberStats } from "@/server/services/members";
 import { groupCounts } from "@/server/services/groups";
+import { attendanceTrend } from "@/server/services/attendance";
+import { followupCounts } from "@/server/services/followup";
+import { childStats } from "@/server/services/children";
 import { Stat } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { Donut, MonthlyBars } from "@/components/charts";
@@ -31,7 +34,10 @@ export default async function DashboardPage() {
     const [t] = await tx.select({ n: count() }).from(memberships).where(eq(memberships.orgId, ctx.org.id));
     const people = ctx.can("members.read") ? await memberStats(tx, ctx) : null;
     const groups = people ? await groupCounts(tx, ctx) : [];
-    return { branches: b!.n, team: t!.n, people, groups, anyMembers: (people?.total ?? 0) > 0 };
+    const trend = ctx.can("attendance.read") ? await attendanceTrend(tx, ctx, 8) : null;
+    const fu = ctx.can("followup.manage") ? await followupCounts(tx, ctx) : null;
+    const kids = ctx.can("children.checkin") || ctx.can("children.manage") ? await childStats(tx, ctx) : null;
+    return { branches: b!.n, team: t!.n, people, groups, anyMembers: (people?.total ?? 0) > 0, trend, fu, kids };
   });
   const steps = [
     {
@@ -49,6 +55,54 @@ export default async function DashboardPage() {
   return (
     <>
       <PageHeader title={`${greeting()}, ${first}`} description={`Here is how ${ctx.org.name} is doing.`} />
+      {(stats.trend || stats.fu || stats.kids) && (
+        <div className="grid grid-cols-4 gap-3 max-lg:grid-cols-2">
+          {stats.trend && (
+            <Stat
+              label="Last Sunday"
+              value={(stats.trend.at(-1)?.value ?? 0).toLocaleString("en-NG")}
+              sub={
+                stats.trend.length > 1 ? (
+                  `${stats.trend.at(-1)!.value - stats.trend.at(-2)!.value >= 0 ? "+" : ""}${stats.trend.at(-1)!.value - stats.trend.at(-2)!.value} on the week before`
+                ) : (
+                  <Link href="/attendance" className="text-accent">
+                    Record attendance
+                  </Link>
+                )
+              }
+            />
+          )}
+          {stats.fu && (
+            <Stat
+              label="Waiting for follow-up"
+              value={((stats.fu.byStage.new ?? 0) + (stats.fu.byStage.contacted ?? 0)).toLocaleString("en-NG")}
+              sub={
+                stats.fu.myOverdue ? (
+                  <span className="text-bad">{stats.fu.myOverdue} of yours overdue</span>
+                ) : (
+                  <Link href="/follow-up" className="text-accent">
+                    Open the board
+                  </Link>
+                )
+              }
+            />
+          )}
+          {stats.fu && (
+            <Stat
+              label="Integrated"
+              value={(stats.fu.byStage.integrated ?? 0).toLocaleString("en-NG")}
+              sub="Settled into church life"
+            />
+          )}
+          {stats.kids && (
+            <Stat
+              label="Children in church"
+              value={stats.kids.here.toLocaleString("en-NG")}
+              sub={`${stats.kids.registered.toLocaleString("en-NG")} registered`}
+            />
+          )}
+        </div>
+      )}
       {stats.people && <PeopleOverview s={stats.people} groups={stats.groups} />}
       {ctx.can("settings.manage") && steps.some((s) => !s.done) && (
         <Card>

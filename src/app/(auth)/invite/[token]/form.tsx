@@ -10,6 +10,7 @@ export function InviteForm({ token, name, hasAccount }: { token: string; name: s
   const { run, pending, fieldErrors } = useAction(acceptInviteAction, { onSuccess: (d) => router.replace(d.next) });
   return (
     <form
+      method="post"
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();

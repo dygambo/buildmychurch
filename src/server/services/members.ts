@@ -195,9 +195,7 @@ export async function listMembers(tx: Tx, ctx: Actor, f: MemberFilters) {
     .innerJoin(branches, eq(branches.id, members.branchId))
     .where(where)
     .orderBy(
-      ...(f.birthdays
-        ? [asc(members.dobMonth), asc(members.dobDay)]
-        : [asc(members.lastName), asc(members.firstName)]),
+      ...(f.birthdays ? [asc(members.dobMonth), asc(members.dobDay)] : [asc(members.lastName), asc(members.firstName)]),
     )
     .limit(pageSize)
     .offset((page - 1) * pageSize);
