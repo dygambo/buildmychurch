@@ -1,0 +1,43 @@
+name: CI
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      APP_URL: http://localhost:3100
+      DATABASE_URL: postgres://bmc_app:bmc_app@localhost:5432/buildmychurch
+      DATABASE_ADMIN_URL: postgres://bmc_owner:bmc_owner@localhost:5432/buildmychurch
+      ENCRYPTION_KEY: ${{ secrets.CI_ENCRYPTION_KEY || 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' }}
+      BLIND_INDEX_KEY: ${{ secrets.CI_BLIND_INDEX_KEY || 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=' }}
+      EMAIL_PROVIDER: log
+      SMS_PROVIDER: log
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Create database roles
+        run: PGPASSWORD=postgres psql -h localhost -U postgres -f scripts/setup-db.sql
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run db:migrate
+      - run: npm test
+      - run: npm run build
+      - name: Browser tests
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e

@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+/* Build My Church design tokens: white surfaces, confident blue accent, blue-tinted neutrals. */
+:root {
+  --bg: #f4f6fb;
+  --surface: #ffffff;
+  --surface-2: #f0f3fa;
+  --surface-3: #e7ecf6;
+  --line: #e2e7f0;
+  --line-strong: #cdd5e3;
+  --fg: #0e1a33;
+  --muted: #56637e;
+  --faint: #8792aa;
+  --accent: #2357e8;
+  --accent-hover: #1a49cf;
+  --accent-ink: #ffffff;
+  --accent-soft: #e9effe;
+  --accent-line: #c7d6fb;
+  --rail: #1f52e0;
+  --good: #0f7b57;
+  --good-soft: #e2f4ec;
+  --warn: #a95c06;
+  --warn-soft: #fcf0de;
+  --bad: #bf2f3a;
+  --bad-soft: #fce8ea;
+  --c1: #2357e8;
+  --c2: #e0508f;
+  --c3: #13a085;
+  --c4: #efa02d;
+  --c5: #7b5be0;
+  --c6: #8aa4f5;
+  --overlay: rgba(12, 20, 40, 0.42);
+  --shadow: 0 1px 2px rgba(16, 30, 70, 0.05), 0 8px 24px -12px rgba(16, 30, 70, 0.14);
+  color-scheme: light;
+}
+.dark {
+  --bg: #0a1120;
+  --surface: #111a2d;
+  --surface-2: #16213a;
+  --surface-3: #1d2a46;
+  --line: #233150;
+  --line-strong: #33446a;
+  --fg: #e6ecf7;
+  --muted: #9ba8c3;
+  --faint: #6e7c99;
+  --accent: #5c88ff;
+  --accent-hover: #7a9dff;
+  --accent-ink: #06102a;
+  --accent-soft: #182750;
+  --accent-line: #2d4686;
+  --rail: #152a66;
+  --good: #3cc893;
+  --good-soft: #0e2e24;
+  --warn: #f2a74c;
+  --warn-soft: #33240e;
+  --bad: #ff6e77;
+  --bad-soft: #3a161b;
+  --c1: #5c88ff;
+  --c2: #f06aa6;
+  --c3: #2ec4a2;
+  --c4: #f5b04a;
+  --c5: #9c80ff;
+  --c6: #3b5aa8;
+  --overlay: rgba(2, 6, 16, 0.62);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px -14px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+  --color-rail: var(--rail);
+  --color-good: var(--good);
+  --color-good-soft: var(--good-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --color-c1: var(--c1);
+  --color-c2: var(--c2);
+  --color-c3: var(--c3);
+  --color-c4: var(--c4);
+  --color-c5: var(--c5);
+  --color-c6: var(--c6);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --shadow-card: var(--shadow);
+}
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  ::selection {
+    background: var(--accent-soft);
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
