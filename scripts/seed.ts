@@ -26,6 +26,22 @@ import {
   verifyBatch,
 } from "@/server/services/giving";
 import { givingTransactions, members } from "@/server/db/schema";
+import {
+  approveExpense,
+  assetSchema,
+  budgetSchema,
+  calculateRemittances,
+  DEFAULT_LIFE,
+  expenseSchema,
+  listCategories,
+  markExpensePaid,
+  previousPeriod,
+  saveAsset,
+  saveBudget,
+  saveExpense,
+  saveOpeningBalances,
+  submitExpense,
+} from "@/server/services/expenses";
 import { and, asc, isNull } from "drizzle-orm";
 
 /**
@@ -555,6 +571,143 @@ async function seedGiving(orgId: string, ownerId: string) {
       });
     }
     await updateGivingSettings(tx, owner, { receiptsForOffline: true });
+
+    /* ---------- expenses, budgets, assets ---------- */
+    const year = today.getFullYear();
+    const cats = Object.fromEntries((await listCategories(tx)).map((c) => [c.code, c.id])) as Record<string, string>;
+    await saveOpeningBalances(tx, owner, {
+      openingDate: new Date(today.getTime() - 120 * 86400000).toISOString().slice(0, 10),
+      balances: { [f.OFFERING!]: 1_850_000_00, [f.TITHE!]: 3_200_000_00, [f.BUILDING!]: 12_500_000_00, [f.WELFARE!]: 420_000_00 },
+    });
+    await saveBudget(
+      tx,
+      counter,
+      budgetSchema.parse({
+        year,
+        branchId: hq!.id,
+        lines: [
+          { categoryId: cats.SALARY, amount: "14400000" },
+          { categoryId: cats.UTIL, amount: "4800000" },
+          { categoryId: cats.MAINT, amount: "3000000" },
+          { categoryId: cats.MINISTRY, amount: "2400000" },
+          { categoryId: cats.WELFARE, amount: "1800000" },
+          { categoryId: cats.OUTREACH, amount: "1500000" },
+          { categoryId: cats.EQUIP, amount: "2500000" },
+          { categoryId: cats.ADMIN, amount: "900000" },
+        ],
+      }),
+    );
+    const spend: [string, string, string, string, number, string, number][] = [
+      // [category, fund, payee, what for, naira, method, days ago]
+      ["SALARY", "TITHE", "Staff payroll", "Monthly salaries and allowances", 1_150_000, "transfer", 75],
+      ["SALARY", "TITHE", "Staff payroll", "Monthly salaries and allowances", 1_150_000, "transfer", 45],
+      ["SALARY", "TITHE", "Staff payroll", "Monthly salaries and allowances", 1_180_000, "transfer", 14],
+      ["UTIL", "OFFERING", "Total Filling Station", "Diesel for Sunday services", 38_000, "cash", 70],
+      ["UTIL", "OFFERING", "Total Filling Station", "Diesel for Sunday services", 41_500, "cash", 56],
+      ["UTIL", "OFFERING", "Ikeja Electric", "Prepaid electricity units", 85_000, "transfer", 50],
+      ["UTIL", "OFFERING", "Total Filling Station", "Diesel for Sunday services", 44_000, "cash", 28],
+      ["UTIL", "OFFERING", "Ikeja Electric", "Prepaid electricity units", 90_000, "transfer", 20],
+      ["MAINT", "OFFERING", "CoolTech Services", "Servicing of auditorium air conditioners", 165_000, "transfer", 40],
+      ["MINISTRY", "OFFERING", "Youth Church", "Youth conference refreshments", 120_000, "transfer", 33],
+      ["WELFARE", "WELFARE", "Mrs. Adaeze Nwosu", "Hospital bill support", 75_000, "transfer", 25],
+      ["OUTREACH", "SEED", "Makoko outreach team", "Food packs for community outreach", 210_000, "transfer", 18],
+      ["ADMIN", "OFFERING", "Jumia", "Printer toner and A4 paper", 32_500, "pos", 9],
+      ["BUILD", "BUILDING", "Dangote Cement (via Bisola Ventures)", "600 bags of cement for the new sanctuary", 3_900_000, "transfer", 12],
+    ];
+    let ref = 4100;
+    for (const [cat, fund, payee, desc, amount, method, ago] of spend) {
+      const id = await saveExpense(
+        tx,
+        counter,
+        expenseSchema.parse({
+          branchId: hq!.id,
+          categoryId: cats[cat],
+          fundId: f[fund],
+          payee,
+          description: desc,
+          amount: String(amount),
+          spentOn: new Date(today.getTime() - ago * 86400000).toISOString().slice(0, 10),
+          method,
+        }),
+      );
+      const r = await submitExpense(tx, counter, id);
+      if (r.status === "submitted") await approveExpense(tx, owner, id);
+      await markExpensePaid(tx, counter, { id, method: method as "cash", paymentRef: method === "cash" ? null : `FT${++ref}` });
+    }
+    // waiting for the pastor's approval, and one approved but not yet paid
+    const pending = await saveExpense(
+      tx,
+      counter,
+      expenseSchema.parse({
+        branchId: hq!.id,
+        categoryId: cats.EQUIP,
+        fundId: f.OFFERING,
+        payee: "Sound Solutions Ltd",
+        description: "Two Shure wireless microphones for the choir",
+        amount: "480000",
+        spentOn: today.toISOString().slice(0, 10),
+        method: "transfer",
+      }),
+    );
+    await submitExpense(tx, counter, pending);
+    const approved = await saveExpense(
+      tx,
+      counter,
+      expenseSchema.parse({
+        branchId: hq!.id,
+        categoryId: cats.MAINT,
+        fundId: f.OFFERING,
+        payee: "Bayo Plumbing Works",
+        description: "Fix leaking pipes in the children's wing toilets",
+        amount: "28500",
+        spentOn: today.toISOString().slice(0, 10),
+        method: "cash",
+      }),
+    );
+    await submitExpense(tx, counter, approved);
+
+    const assetsToAdd = [
+      ["Mikano 60KVA soundproof generator", "generator", "2023-04-12", "18500000", "Generator house", "Sanctuary Keepers"],
+      ["Yamaha TF5 digital mixer", "sound", "2024-01-20", "6200000", "Sound booth", "Media"],
+      ["Toyota Hiace church bus", "vehicle", "2022-09-05", "24000000", "Church car park", "Transport unit"],
+      ["Roland Fantom 8 keyboard", "instrument", "2024-06-15", "3100000", "Main auditorium", "Choir"],
+      ["Land at Lekki Phase 2 (2 plots)", "land", "2021-03-01", "65000000", null, "Board of trustees"],
+      ["Sony FX6 camera", "media", "2025-02-10", "9800000", "Media room", "Media"],
+    ] as const;
+    for (const [name, category, purchasedOn, cost, location, custodian] of assetsToAdd)
+      await saveAsset(
+        tx,
+        counter,
+        assetSchema.parse({
+          branchId: hq!.id,
+          name,
+          category,
+          purchasedOn,
+          cost,
+          usefulLifeMonths: DEFAULT_LIFE[category] ?? "",
+          location: location ?? "",
+          custodian,
+          condition: "good",
+        }),
+      );
+
+    // Lekki gave last month, so it owes headquarters its share
+    const lekki = (await tx.select().from(branches)).find((b) => b.code === "LEK")!;
+    const period = previousPeriod();
+    for (const [i, amt] of [1_250_000_00, 640_000_00].entries())
+      await tx.insert(givingTransactions).values({
+        orgId,
+        branchId: lekki.id,
+        fundId: i ? f.OFFERING! : f.TITHE!,
+        amountKobo: amt,
+        channel: "transfer",
+        source: "batch",
+        status: "confirmed",
+        givenOn: `${period}-1${i + 2}`,
+        reference: `LEK-SEED-${i}`,
+        confirmedAt: new Date(),
+      });
+    await calculateRemittances(tx, orgId, period);
   });
 }
 

@@ -50,6 +50,20 @@
       "when": 1792074493630,
       "tag": "0006_giving_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792076870769,
+      "tag": "0007_expenses",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792076872872,
+      "tag": "0008_expenses_rls",
+      "breakpoints": true
     }
   ]
 }

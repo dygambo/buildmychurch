@@ -108,12 +108,15 @@ export function StackedBars({
   height = 240,
   format = (v: number) => v.toLocaleString("en-NG"),
   label,
+  grouped = false,
 }: {
   data: Record<string, number | string>[];
   series: { key: string; name: string; color: string }[];
   height?: number;
   format?: (v: number) => string;
   label: string;
+  /** Bars side by side instead of stacked, e.g. income next to spending. */
+  grouped?: boolean;
 }) {
   return (
     <div style={{ height }} role="img" aria-label={label}>
@@ -139,10 +142,10 @@ export function StackedBars({
               key={s.key}
               dataKey={s.key}
               name={s.name}
-              stackId="a"
+              stackId={grouped ? undefined : "a"}
               fill={s.color}
-              maxBarSize={32}
-              radius={i === series.length - 1 ? [5, 5, 0, 0] : [0, 0, 0, 0]}
+              maxBarSize={grouped ? 18 : 32}
+              radius={grouped || i === series.length - 1 ? [5, 5, 0, 0] : [0, 0, 0, 0]}
             />
           ))}
         </BarChart>

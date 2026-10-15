@@ -29,3 +29,14 @@ every(15, async (now) => {
   const slot = Math.floor(now.getTime() / (15 * 60_000));
   await enqueue(db, "payments.reconcile", {}, { dedupeKey: `payments-reconcile:${slot}`, maxAttempts: 1 });
 });
+
+// 1st of the month, 6am: branch remittances for the month just ended (churches with one branch get nothing).
+every(60, async (now) => {
+  const c = lagosClock(now);
+  if (c.date.slice(8) !== "01" || c.hour !== 6) return;
+  const [y, m] = c.date.split("-").map(Number) as [number, number];
+  const period = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
+  const orgs = await db.select({ id: organisations.id }).from(organisations);
+  for (const o of orgs)
+    await enqueue(db, "finance.remittances", { period }, { orgId: o.id, dedupeKey: `remittances:${o.id}:${period}` });
+});

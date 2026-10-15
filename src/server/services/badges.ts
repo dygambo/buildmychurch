@@ -1,7 +1,7 @@
 import { and, count, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import type { Ctx } from "../auth/context";
 import { withOrg } from "../db";
-import { childCheckins, followups, givingBatches } from "../db/schema";
+import { childCheckins, expenses, followups, givingBatches } from "../db/schema";
 
 type Badges = Record<string, { count: number; tone?: "accent" | "bad" }>;
 
@@ -33,6 +33,19 @@ export async function navBadges(ctx: Ctx): Promise<Badges> {
           ),
         );
       if (waiting && Number(waiting.n) > 0) out["/giving"] = { count: Number(waiting.n), tone: "accent" };
+    }
+    if (ctx.can("finance.approve")) {
+      const [waiting] = await tx
+        .select({ n: count() })
+        .from(expenses)
+        .where(
+          and(
+            eq(expenses.status, "submitted"),
+            ne(expenses.requestedBy, ctx.user.id),
+            ctx.branchIds.length ? inArray(expenses.branchId, ctx.branchIds) : undefined,
+          ),
+        );
+      if (waiting && Number(waiting.n) > 0) out["/expenses"] = { count: Number(waiting.n), tone: "accent" };
     }
     return out;
   });

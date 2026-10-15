@@ -213,18 +213,29 @@ export const rateLimits = pgTable("rate_limits", {
   resetAt: ts("reset_at").notNull(),
 });
 
-/** Uploaded files (logos, memo attachments, photos). Bytes live in the storage provider. */
-export const files = pgTable("files", {
-  id: id(),
-  orgId: orgId(),
-  name: text("name").notNull(),
-  mime: text("mime").notNull(),
-  size: integer("size").notNull(),
-  storageKey: text("storage_key").notNull(),
-  sha256: text("sha256").notNull(),
-  uploadedBy: uuid("uploaded_by"),
-  createdAt: createdAt(),
-});
+/**
+ * Uploaded files (receipts, invoices, memo attachments, photos), each attached to one record.
+ * The bytes live in the storage provider under `storageKey`.
+ */
+export const files = pgTable(
+  "files",
+  {
+    id: id(),
+    orgId: orgId(),
+    name: text("name").notNull(),
+    mime: text("mime").notNull(),
+    size: integer("size").notNull(),
+    storageKey: text("storage_key").notNull(),
+    sha256: text("sha256").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: uuid("entity_id").notNull(),
+    uploadedBy: uuid("uploaded_by"),
+    uploadedByName: text("uploaded_by_name"),
+    deletedAt: ts("deleted_at"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("files_entity_idx").on(t.orgId, t.entityType, t.entityId)],
+);
 
 /** Development mailbox: when EMAIL_PROVIDER=log, emails land here instead of being sent. */
 export const devMailbox = pgTable("dev_mailbox", {

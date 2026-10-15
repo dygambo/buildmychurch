@@ -258,3 +258,182 @@ export const paymentEvents = pgTable("payment_events", {
   error: text("error"),
   receivedAt: createdAt(),
 });
+
+/* ================= expenses and accounts ================= */
+
+export const expenseCategories = pgTable(
+  "expense_categories",
+  {
+    id: id(),
+    orgId: orgId(),
+    name: text("name").notNull(),
+    code: text("code").notNull(),
+    description: text("description"),
+    color: text("color").notNull().default("c1"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    archivedAt: ts("archived_at"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("expense_categories_org_code_uq").on(t.orgId, t.code)],
+);
+
+export const EXPENSE_METHODS = ["cash", "transfer", "cheque", "pos", "other"] as const;
+export const EXPENSE_STATUSES = ["draft", "submitted", "approved", "rejected", "paid", "void"] as const;
+
+/**
+ * Money going out. Raised, approved by someone other than the person who raised it (small amounts under the
+ * church's threshold approve themselves), then marked paid. Paid expenses can't be edited, only voided.
+ */
+export const expenses = pgTable(
+  "expenses",
+  {
+    id: id(),
+    orgId: orgId(),
+    branchId: uuid("branch_id").notNull(),
+    expenseNo: text("expense_no").notNull(),
+    categoryId: uuid("category_id").notNull(),
+    /** The fund the money comes out of. Restricted funds can only pay for their purpose. */
+    fundId: uuid("fund_id"),
+    payee: text("payee").notNull(),
+    description: text("description").notNull(),
+    amountKobo: kobo("amount_kobo").notNull(),
+    spentOn: date("spent_on").notNull(),
+    method: text("method", { enum: EXPENSE_METHODS }).notNull().default("transfer"),
+    paymentRef: text("payment_ref"),
+    status: text("status", { enum: EXPENSE_STATUSES }).notNull().default("draft"),
+    requestedBy: uuid("requested_by").notNull(),
+    requestedByName: text("requested_by_name").notNull(),
+    submittedAt: ts("submitted_at"),
+    autoApproved: boolean("auto_approved").notNull().default(false),
+    approvedBy: uuid("approved_by"),
+    approvedByName: text("approved_by_name"),
+    approvedAt: ts("approved_at"),
+    rejectionNote: text("rejection_note"),
+    paidBy: uuid("paid_by"),
+    paidByName: text("paid_by_name"),
+    paidAt: ts("paid_at"),
+    voidedBy: uuid("voided_by"),
+    voidReason: text("void_reason"),
+    voidedAt: ts("voided_at"),
+    note: text("note"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("expenses_org_no_uq").on(t.orgId, t.expenseNo),
+    index("expenses_org_date_idx").on(t.orgId, t.spentOn),
+    index("expenses_org_status_idx").on(t.orgId, t.status),
+    index("expenses_org_cat_idx").on(t.orgId, t.categoryId, t.spentOn),
+    check("expenses_amount_ck", sql`${t.amountKobo} > 0`),
+    check(
+      "expenses_two_person_ck",
+      sql`${t.approvedBy} is null or ${t.autoApproved} or ${t.approvedBy} <> ${t.requestedBy}`,
+    ),
+  ],
+);
+
+/** Yearly budget per category and branch. */
+export const budgetLines = pgTable(
+  "budget_lines",
+  {
+    id: id(),
+    orgId: orgId(),
+    year: integer("year").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    categoryId: uuid("category_id").notNull(),
+    amountKobo: kobo("amount_kobo").notNull(),
+    updatedBy: uuid("updated_by"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("budget_lines_uq").on(t.orgId, t.year, t.branchId, t.categoryId),
+    check("budget_lines_amount_ck", sql`${t.amountKobo} >= 0`),
+  ],
+);
+
+/**
+ * What each branch sends to headquarters for a month: a share of its income. The branch records the payment;
+ * someone at headquarters confirms it arrived.
+ */
+export const remittances = pgTable(
+  "remittances",
+  {
+    id: id(),
+    orgId: orgId(),
+    branchId: uuid("branch_id").notNull(),
+    /** "2026-09" */
+    period: text("period").notNull(),
+    incomeKobo: kobo("income_kobo").notNull(),
+    /** Share in basis points: 1000 = 10%. */
+    rateBps: integer("rate_bps").notNull(),
+    dueKobo: kobo("due_kobo").notNull(),
+    paidKobo: kobo("paid_kobo").notNull().default(0),
+    status: text("status", { enum: ["due", "submitted", "confirmed"] })
+      .notNull()
+      .default("due"),
+    paidOn: date("paid_on"),
+    method: text("method", { enum: EXPENSE_METHODS }),
+    paymentRef: text("payment_ref"),
+    note: text("note"),
+    submittedBy: uuid("submitted_by"),
+    submittedByName: text("submitted_by_name"),
+    submittedAt: ts("submitted_at"),
+    confirmedBy: uuid("confirmed_by"),
+    confirmedByName: text("confirmed_by_name"),
+    confirmedAt: ts("confirmed_at"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("remittances_uq").on(t.orgId, t.branchId, t.period),
+    check("remittances_two_person_ck", sql`${t.confirmedBy} is null or ${t.confirmedBy} <> ${t.submittedBy}`),
+  ],
+);
+
+export const ASSET_CATEGORIES = [
+  "land",
+  "building",
+  "vehicle",
+  "generator",
+  "sound",
+  "instrument",
+  "media",
+  "furniture",
+  "computer",
+  "other",
+] as const;
+
+export const assets = pgTable(
+  "assets",
+  {
+    id: id(),
+    orgId: orgId(),
+    branchId: uuid("branch_id").notNull(),
+    assetNo: text("asset_no").notNull(),
+    name: text("name").notNull(),
+    category: text("category", { enum: ASSET_CATEGORIES }).notNull(),
+    description: text("description"),
+    serialNo: text("serial_no"),
+    location: text("location"),
+    custodian: text("custodian"),
+    purchasedOn: date("purchased_on"),
+    costKobo: kobo("cost_kobo").notNull().default(0),
+    /** Straight-line depreciation over this many months. Null for land and other things that don't wear out. */
+    usefulLifeMonths: integer("useful_life_months"),
+    salvageKobo: kobo("salvage_kobo").notNull().default(0),
+    condition: text("condition", { enum: ["new", "good", "fair", "poor", "broken"] })
+      .notNull()
+      .default("good"),
+    status: text("status", { enum: ["in_use", "in_repair", "disposed", "lost"] })
+      .notNull()
+      .default("in_use"),
+    disposedOn: date("disposed_on"),
+    disposalKobo: kobo("disposal_kobo"),
+    disposalNote: text("disposal_note"),
+    createdBy: uuid("created_by"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("assets_org_no_uq").on(t.orgId, t.assetNo), index("assets_org_cat_idx").on(t.orgId, t.category)],
+);
