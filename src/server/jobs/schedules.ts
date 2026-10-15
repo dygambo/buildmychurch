@@ -55,3 +55,11 @@ every(15, async (now) => {
   const slot = Math.floor(now.getTime() / (15 * 60_000));
   await enqueue(db, "messages.requeue", {}, { dedupeKey: `messages-requeue:${slot}`, maxAttempts: 1 });
 });
+
+// 1am every day: services that have happened are marked completed.
+every(60, async (now) => {
+  const c = lagosClock(now);
+  if (c.hour !== 1) return;
+  const orgs = await db.select({ id: organisations.id }).from(organisations);
+  for (const o of orgs) await enqueue(db, "schedule.complete", {}, { orgId: o.id, dedupeKey: `schedule-complete:${o.id}:${c.date}` });
+});

@@ -25,7 +25,17 @@ import {
   updateGivingSettings,
   verifyBatch,
 } from "@/server/services/giving";
-import { givingTransactions, jobs, members, messageCampaigns, messages, smsLedger } from "@/server/db/schema";
+import { givingTransactions, jobs, members, messageCampaigns, messages, scheduleVersions, smsLedger } from "@/server/db/schema";
+import {
+  completePastSchedules,
+  generateVersionPdf,
+  getSchedule as getScheduleFull,
+  listTemplates as listScheduleTemplates,
+  publishSchedule,
+  saveSchedule,
+  scheduleSchema,
+  startSchedule,
+} from "@/server/services/schedules";
 import {
   applyDeliveryReport,
   AUTOMATIONS,
@@ -435,6 +445,7 @@ async function main() {
   });
   await seedGiving(r.orgId, row!.u.id);
   await seedMessaging(r.orgId, row!.u.id);
+  await seedSchedules(r.orgId, row!.u.id);
   console.log(`Demo church created with 120 members.\nSign in with ${DEMO.email} / ${DEMO.password}`);
 }
 
@@ -786,6 +797,91 @@ async function seedMessaging(orgId: string, ownerId: string) {
   for (const [i, m] of sent.entries()) if (m.providerId) await applyDeliveryReport(m.providerId, i % 17 === 5 ? "failed" : "delivered", "Number switched off");
   await db.delete(jobs).where(inArray(jobs.type, ["messages.prepare", "messages.deliver"]));
   await withOrg(orgId, (tx) => tx.update(messageCampaigns).set({ status: "sent", finishedAt: new Date() }).where(inArray(messageCampaigns.id, ids)));
+}
+
+/** Last Sunday (completed), this Sunday (published, with people), and a midweek draft. */
+async function seedSchedules(orgId: string, ownerId: string) {
+  const owner = await actorFor(ownerId, orgId);
+  const versionIds = await withOrg(orgId, async (tx) => {
+    const [hq] = await tx.select().from(branches).orderBy(asc(branches.createdAt)).limit(1);
+    const people = await tx
+      .select({ id: members.id, first: members.firstName, last: members.lastName, title: members.title })
+      .from(members)
+      .where(and(isNull(members.deletedAt), eq(members.stage, "member")))
+      .limit(14);
+    const name = (i: number) => [people[i]!.title, people[i]!.first, people[i]!.last].filter(Boolean).join(" ");
+    const templates = await listScheduleTemplates(tx);
+    const sundayT = templates.find((t) => t.serviceType === "sunday")!;
+    const today = new Date();
+    const sunday = new Date(today.getTime() + (((7 - today.getUTCDay()) % 7) || 7) * 86400000).toISOString().slice(0, 10);
+    const lastSunday = new Date(new Date(`${sunday}T12:00:00Z`).getTime() - 7 * 86400000).toISOString().slice(0, 10);
+    const ids: string[] = [];
+    for (const [date, theme] of [
+      [lastSunday, "Faithful in little things"],
+      [sunday, "Thanksgiving that moves heaven"],
+    ] as const) {
+      const id = await startSchedule(tx, owner, { from: "template", templateId: sundayT.id, copyOf: null, serviceDate: date, branchId: hq!.id });
+      const s = await getScheduleFull(tx, owner, id);
+      const who: Record<string, [number, string | null][]> = {
+        "Opening prayer": [[0, null]],
+        "Praise and worship": [
+          [1, "Worship leader"],
+          [2, "Backup"],
+        ],
+        "Scripture reading": [[3, null]],
+        "Announcements": [[4, null]],
+        "Tithes and offering": [[5, "Exhortation"]],
+        "Sermon": [[6, "Minister"]],
+        "Altar call": [[6, null]],
+        "Thanksgiving and first-timers": [[7, null]],
+      };
+      await saveSchedule(
+        tx,
+        owner,
+        scheduleSchema.parse({
+          id,
+          branchId: hq!.id,
+          title: date === sunday ? "Harvest Thanksgiving Service" : "Sunday Celebration Service",
+          serviceType: "sunday",
+          typeLabel: date === sunday ? "Harvest Thanksgiving" : null,
+          serviceDate: date,
+          startTime: "08:00",
+          endTime: "10:30",
+          venue: "Main auditorium",
+          theme,
+          scripture: date === sunday ? "Psalm 100:4" : "Luke 16:10",
+          presidingName: "Pastor Tunde Adeyemi",
+          announcements: "Ushers and workers: be seated by 7:30am for pre-service prayer. Choir robes: blue.",
+          internalNotes: "Check the generator diesel on Saturday evening.",
+          items: s.items.map((it) => ({
+            title: it.title,
+            durationMin: it.durationMin,
+            description: it.title === "Sermon" ? "Keep to time: altar call by 9:55am." : it.description,
+            custom: it.title === "Praise and worship" ? [{ label: "Songs", value: "Jesus Is Lord; Agbara Re; Way Maker" }] : [],
+            assignees: (who[it.title] ?? []).map(([i, r]) => ({ memberId: people[i]!.id, name: name(i), responsibility: r })),
+          })),
+        }),
+      );
+      await publishSchedule(tx, owner, { id, notify: false, note: null });
+      ids.push(id);
+    }
+    // a midweek draft still being planned
+    await startSchedule(tx, owner, {
+      from: "template",
+      templateId: templates.find((t) => t.serviceType === "midweek")!.id,
+      copyOf: null,
+      serviceDate: new Date(new Date(`${sunday}T12:00:00Z`).getTime() + 3 * 86400000).toISOString().slice(0, 10),
+      branchId: hq!.id,
+    });
+    await completePastSchedules(orgId);
+    return tx
+      .select({ id: scheduleVersions.id })
+      .from(scheduleVersions)
+      .where(inArray(scheduleVersions.scheduleId, ids));
+  });
+  await completePastSchedules(orgId);
+  for (const v of versionIds) await generateVersionPdf(orgId, v.id, { final: true });
+  await db.delete(jobs).where(inArray(jobs.type, ["schedule.pdf", "schedule.notify"]));
 }
 
 main()

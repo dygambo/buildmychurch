@@ -2,6 +2,7 @@
   "name": "buildmychurch",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Build My Church: church management for Nigerian churches",
   "license": "UNLICENSED",
   "engines": {
