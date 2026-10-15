@@ -25,7 +25,17 @@ import {
   updateGivingSettings,
   verifyBatch,
 } from "@/server/services/giving";
-import { givingTransactions, members } from "@/server/db/schema";
+import { givingTransactions, jobs, members, messageCampaigns, messages, smsLedger } from "@/server/db/schema";
+import {
+  applyDeliveryReport,
+  AUTOMATIONS,
+  automationSchema,
+  campaignSchema as messageSchema,
+  createCampaign,
+  deliverMessages,
+  prepareCampaign,
+  saveAutomation,
+} from "@/server/services/messaging";
 import {
   approveExpense,
   assetSchema,
@@ -42,7 +52,7 @@ import {
   saveOpeningBalances,
   submitExpense,
 } from "@/server/services/expenses";
-import { and, asc, isNull } from "drizzle-orm";
+import { and, asc, inArray, isNull } from "drizzle-orm";
 
 /**
  * Creates a demo church with branches, departments, home cells and about 120 members.
@@ -424,6 +434,7 @@ async function main() {
     }
   });
   await seedGiving(r.orgId, row!.u.id);
+  await seedMessaging(r.orgId, row!.u.id);
   console.log(`Demo church created with 120 members.\nSign in with ${DEMO.email} / ${DEMO.password}`);
 }
 
@@ -709,6 +720,72 @@ async function seedGiving(orgId: string, ownerId: string) {
       });
     await calculateRemittances(tx, orgId, period);
   });
+}
+
+/** A few broadcasts already sent (with delivery reports), one scheduled, and birthday wishes switched on. */
+async function seedMessaging(orgId: string, ownerId: string) {
+  const owner = await actorFor(ownerId, orgId);
+  const ids = await withOrg(orgId, async (tx) => {
+    await tx.insert(smsLedger).values({
+      orgId,
+      units: 2000,
+      kind: "topup",
+      amountKobo: 2000 * 400,
+      reference: "BMC-SEED-TOPUP",
+      note: "Bought 2,000 units",
+      createdBy: ownerId,
+      createdByName: owner.user.name,
+    });
+    for (const key of ["birthday", "welcome"] as const)
+      await saveAutomation(tx, owner, automationSchema.parse({ key, enabled: true, channel: "sms", body: AUTOMATIONS[key].body }));
+    const a = await createCampaign(
+      tx,
+      owner,
+      messageSchema.parse({
+        channel: "sms",
+        body: "Hi {first_name}, join us this Sunday at 8am for Thanksgiving Service. Come with family and friends! - {church}",
+        audience: { kind: "stages", stages: ["member", "regular"] },
+      }),
+    );
+    const b = await createCampaign(
+      tx,
+      owner,
+      messageSchema.parse({
+        channel: "email",
+        subject: "October at {church}: Harvest, youth week and the new sanctuary",
+        body: "Dear {first_name},\n\nThank you for a wonderful September. Here's what's coming up this month.\n\nHarvest Thanksgiving holds on the last Sunday of October. Youth Week runs from the 20th, with a concert on Friday night.\n\nWork on the new sanctuary continues: we've poured the foundation. Thank you for your pledges and gifts.\n\nGod bless you,\n{church}",
+        audience: { kind: "everyone" },
+      }),
+    );
+    const saturday = new Date();
+    saturday.setUTCDate(saturday.getUTCDate() + ((6 - saturday.getUTCDay() + 7) % 7 || 7));
+    saturday.setUTCHours(16, 0, 0, 0);
+    await createCampaign(
+      tx,
+      owner,
+      messageSchema.parse({
+        channel: "sms",
+        body: "Choir, rehearsal holds today at 4pm in the main auditorium. Please be punctual. - {church}",
+        audience: { kind: "everyone", gender: "female" },
+        scheduleAt: saturday.toISOString(),
+      }),
+    );
+    return [a.id, b.id];
+  });
+  for (const id of ids) {
+    await prepareCampaign(orgId, id);
+    const queued = await withOrg(orgId, (tx) =>
+      tx.select({ id: messages.id }).from(messages).where(and(eq(messages.campaignId, id), eq(messages.status, "queued"))),
+    );
+    await deliverMessages(orgId, queued.map((q) => q.id));
+  }
+  // the networks report most SMS delivered
+  const sent = await withOrg(orgId, (tx) =>
+    tx.select({ providerId: messages.providerId }).from(messages).where(and(eq(messages.channel, "sms"), eq(messages.status, "sent"))),
+  );
+  for (const [i, m] of sent.entries()) if (m.providerId) await applyDeliveryReport(m.providerId, i % 17 === 5 ? "failed" : "delivered", "Number switched off");
+  await db.delete(jobs).where(inArray(jobs.type, ["messages.prepare", "messages.deliver"]));
+  await withOrg(orgId, (tx) => tx.update(messageCampaigns).set({ status: "sent", finishedAt: new Date() }).where(inArray(messageCampaigns.id, ids)));
 }
 
 main()

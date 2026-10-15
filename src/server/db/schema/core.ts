@@ -244,7 +244,7 @@ export const devMailbox = pgTable("dev_mailbox", {
   subject: text("subject").notNull(),
   html: text("html").notNull(),
   text: text("text"),
-  channel: text("channel", { enum: ["email", "sms"] })
+  channel: text("channel", { enum: ["email", "sms", "whatsapp"] })
     .notNull()
     .default("email"),
   createdAt: createdAt(),

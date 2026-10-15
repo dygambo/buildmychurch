@@ -6,6 +6,7 @@ import { systemActor } from "../auth/context";
 import { audit } from "../audit";
 import { naira } from "@/lib/format";
 import { confirmOnlineGift, failOnlineGift } from "./giving";
+import { confirmTopup, failTopup } from "./messaging";
 
 type Intent = typeof paymentIntents.$inferSelect;
 type PurposeHandler = {
@@ -20,7 +21,10 @@ const handlers: Record<Intent["purpose"], PurposeHandler | undefined> = {
     },
     failed: async (tx, i) => failOnlineGift(tx, i.targetId),
   },
-  sms_topup: undefined,
+  sms_topup: {
+    succeeded: async (tx, i) => confirmTopup(tx, i.orgId, i.targetId),
+    failed: async (tx, i) => failTopup(tx, i.targetId),
+  },
 };
 
 /** Lets other modules (the SMS wallet) handle their own kind of payment. */

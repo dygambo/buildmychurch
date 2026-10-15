@@ -1009,9 +1009,9 @@ export async function setCampaignStatus(tx: Tx, ctx: Actor, id: string, status: 
   });
 }
 
-const raisedSql = sql<number>`coalesce((select sum(t.amount_kobo) from ${givingTransactions} t where t.campaign_id = ${pledgeCampaigns.id} and t.status = 'confirmed'), 0)::bigint`;
-const pledgedSql = sql<number>`coalesce((select sum(p.amount_kobo) from ${pledges} p where p.campaign_id = ${pledgeCampaigns.id} and p.status <> 'cancelled'), 0)::bigint`;
-const pledgersSql = sql<number>`(select count(*) from ${pledges} p where p.campaign_id = ${pledgeCampaigns.id} and p.status <> 'cancelled')::int`;
+const raisedSql = sql<number>`coalesce((select sum(t.amount_kobo) from ${givingTransactions} t where t.campaign_id = pledge_campaigns.id and t.status = 'confirmed'), 0)::bigint`;
+const pledgedSql = sql<number>`coalesce((select sum(p.amount_kobo) from ${pledges} p where p.campaign_id = pledge_campaigns.id and p.status <> 'cancelled'), 0)::bigint`;
+const pledgersSql = sql<number>`(select count(*) from ${pledges} p where p.campaign_id = pledge_campaigns.id and p.status <> 'cancelled')::int`;
 
 export async function listCampaigns(tx: Tx, ctx: Actor | null, opts: { onlineOnly?: boolean } = {}) {
   if (ctx) assertCan(ctx, "giving.read", "see projects");
@@ -1052,7 +1052,7 @@ export async function getCampaign(tx: Tx, ctx: Actor, id: string) {
   const rows = await tx
     .select({
       p: pledges,
-      paid: sql<number>`coalesce((select sum(t.amount_kobo) from ${givingTransactions} t where t.pledge_id = ${pledges.id} and t.status = 'confirmed'), 0)::bigint`,
+      paid: sql<number>`coalesce((select sum(t.amount_kobo) from ${givingTransactions} t where t.pledge_id = pledges.id and t.status = 'confirmed'), 0)::bigint`,
       memberNo: members.memberNo,
     })
     .from(pledges)
@@ -1178,6 +1178,8 @@ export type GivingSettings = {
   accountName: string | null;
   accountLast4: string | null;
   receiptsForOffline: boolean;
+  /** Givers with a phone but no email get a short SMS receipt (uses SMS units). */
+  smsReceipts: boolean;
   thankYouMessage: string | null;
 };
 
@@ -1190,6 +1192,7 @@ export async function givingSettings(tx: Tx, orgId: string): Promise<GivingSetti
     accountName: g.accountName ?? null,
     accountLast4: g.accountLast4 ?? null,
     receiptsForOffline: g.receiptsForOffline ?? true,
+    smsReceipts: g.smsReceipts ?? true,
     thankYouMessage: g.thankYouMessage ?? null,
   };
 }
@@ -1397,7 +1400,27 @@ export async function issueReceipt(tx: Tx, orgId: string, txId: string) {
     email ??= decrypt(m?.emailEnc);
     name ??= m ? [m.title, m.firstName, m.lastName].filter(Boolean).join(" ") : null;
   }
-  if (!email) return receiptNo;
+  if (!email) {
+    // no email: send a short SMS receipt instead, if there's a phone and SMS units
+    let phone = decrypt(t.t.donorPhoneEnc);
+    if (!phone && t.t.memberId) {
+      const [m] = await tx.select({ phoneEnc: members.phoneEnc }).from(members).where(eq(members.id, t.t.memberId));
+      phone = decrypt(m?.phoneEnc);
+    }
+    if (phone && (await givingSettings(tx, orgId)).smsReceipts) {
+      const [o] = await tx.select({ name: organisations.name }).from(organisations).where(eq(organisations.id, orgId));
+      const { sendDirect } = await import("./messaging");
+      await sendDirect(tx, orgId, {
+        channel: "sms",
+        to: phone,
+        name,
+        memberId: t.t.memberId,
+        purpose: "receipt",
+        body: `Thank you for your ${t.fundName.toLowerCase()} of N${(t.t.amountKobo / 100).toLocaleString("en-NG")} to ${o!.name} on ${formatDate(String(t.t.givenOn))}. Receipt ${receiptNo}. God bless you.`,
+      });
+    }
+    return receiptNo;
+  }
   const [o] = await tx
     .select({ name: organisations.name, phone: organisations.phone })
     .from(organisations)

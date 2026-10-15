@@ -277,7 +277,7 @@ export async function listFollowups(
       phoneEnc: members.phoneEnc,
       hasPrayer: sql<boolean>`${followups.prayerRequest} is not null`,
       overdue: sql<boolean>`coalesce(${followups.dueAt} < now() and ${followups.stage} in ('new', 'contacted'), false)`,
-      notes: sql<number>`(select count(*)::int from ${followupNotes} n where n.followup_id = ${followups.id})`,
+      notes: sql<number>`(select count(*)::int from ${followupNotes} n where n.followup_id = followups.id)`,
     })
     .from(followups)
     .innerJoin(members, eq(members.id, followups.memberId))

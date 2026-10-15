@@ -157,6 +157,11 @@ export function GivingSettingsView({
               defaultChecked={settings.receiptsForOffline}
               label="Also email receipts for named envelopes and transfers, when the member has an email address"
             />
+            <Checkbox
+              name="smsReceipts"
+              defaultChecked={settings.smsReceipts}
+              label="Send a short SMS receipt instead when there's a phone number but no email (uses SMS units)"
+            />
             <Field label="Thank-you message on receipts" htmlFor="ty" optional hint="Shown above the receipt details.">
               <Textarea
                 id="ty"

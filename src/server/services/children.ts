@@ -297,7 +297,7 @@ export async function archiveChild(tx: Tx, ctx: Actor, id: string, status: "acti
 
 /* ---------- reading ---------- */
 
-const inChurch = sql<boolean>`exists (select 1 from ${childCheckins} cc where cc.child_id = ${children.id} and cc.checked_out_at is null)`;
+const inChurch = sql<boolean>`exists (select 1 from ${childCheckins} cc where cc.child_id = children.id and cc.checked_out_at is null)`;
 
 export async function listChildren(
   tx: Tx,
@@ -837,7 +837,7 @@ export async function inChurchNow(tx: Tx, ctx: Actor) {
       checkedInAt: childCheckins.checkedInAt,
       checkedInByName: childCheckins.checkedInByName,
       hasMedical: sql<boolean>`${children.allergiesEnc} is not null or ${children.medicalEnc} is not null or ${children.specialNeedsEnc} is not null`,
-      droppedOff: sql<string>`(select g.first_name || ' ' || g.last_name from ${guardians} g where g.id = ${childCheckins.droppedOffBy})`,
+      droppedOff: sql<string>`(select g.first_name || ' ' || g.last_name from ${guardians} g where g.id = child_checkins.dropped_off_by)`,
     })
     .from(childCheckins)
     .innerJoin(children, eq(children.id, childCheckins.childId))
@@ -853,7 +853,7 @@ export async function checkinRows(
 ) {
   const dropped = sql<
     string | null
-  >`(select coalesce(g.title || ' ', '') || g.first_name || ' ' || g.last_name || ' (' || cg.relationship || ')' from ${guardians} g left join ${childGuardians} cg on cg.guardian_id = g.id and cg.child_id = ${childCheckins.childId} where g.id = ${childCheckins.droppedOffBy})`;
+  >`(select coalesce(g.title || ' ', '') || g.first_name || ' ' || g.last_name || ' (' || cg.relationship || ')' from ${guardians} g left join ${childGuardians} cg on cg.guardian_id = g.id and cg.child_id = ${childCheckins.childId} where g.id = child_checkins.dropped_off_by)`;
   const picked = sql<
     string | null
   >`(select coalesce(g.title || ' ', '') || g.first_name || ' ' || g.last_name || ' (' || coalesce(cg.relationship, 'not linked') || ')' from ${guardians} g left join ${childGuardians} cg on cg.guardian_id = g.id and cg.child_id = ${childCheckins.childId} where g.id = ${childCheckins.pickedUpBy})`;

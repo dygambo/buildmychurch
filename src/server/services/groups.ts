@@ -29,7 +29,7 @@ export async function listGroups(tx: Tx, ctx: Actor, opts: { kind?: GroupKind; i
       location: groups.location,
       area: groups.area,
       archived: sql<boolean>`${groups.archivedAt} is not null`,
-      size: sql<number>`(select count(*)::int from ${groupMembers} gm join ${members} m on m.id = gm.member_id and m.deleted_at is null where gm.group_id = ${groups.id})`,
+      size: sql<number>`(select count(*)::int from ${groupMembers} gm join ${members} m on m.id = gm.member_id and m.deleted_at is null where gm.group_id = groups.id)`,
     })
     .from(groups)
     .innerJoin(branches, eq(branches.id, groups.branchId))

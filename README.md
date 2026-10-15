@@ -80,6 +80,24 @@ tests/              unit, integration and e2e tests
   recovery codes, HTTP-only session cookies stored hashed.
 - **Audit log:** append-only; the app's database role has no permission to edit or delete it.
 - **Headers:** strict Content Security Policy, HSTS, no framing.
+- **Money:** the giving ledger and SMS unit ledger are append-only (database triggers); mistakes are reversals.
+  Offline collections and large expenses need two different people (checked in the app and by the database).
+  Online payments are confirmed by asking Paystack, never by trusting a redirect or webhook body.
+- **Uploads** are type-checked from their bytes, stored outside the web root, and served only to people who can see
+  the record they belong to, with a sandboxing Content Security Policy.
+
+## Connecting providers
+
+Everything runs locally without accounts: emails and SMS land in `/dev/mailbox`, and payments use a practice
+checkout. For a live site, set these in the environment:
+
+| What | Settings | Notes |
+| --- | --- | --- |
+| Email | `EMAIL_PROVIDER=resend` + `RESEND_API_KEY`, or `smtp` + `SMTP_URL` | `EMAIL_FROM` is the sender |
+| Online giving and SMS top-ups | `PAYMENTS_PROVIDER=paystack` + `PAYSTACK_SECRET_KEY` | Webhook: `/api/webhooks/paystack`. Each church's gifts settle to its own subaccount |
+| SMS | `SMS_PROVIDER=termii` + `TERMII_API_KEY`, `TERMII_SENDER_ID` | Delivery reports: `/api/webhooks/termii` (signed with `TERMII_WEBHOOK_SECRET`). Price per unit: `SMS_UNIT_PRICE_KOBO` |
+| WhatsApp | `WHATSAPP_PROVIDER=meta` + phone number ID, access token, app secret, verify token | Create an approved template named `WHATSAPP_TEMPLATE` with one body variable. Webhook: `/api/webhooks/whatsapp` |
+| File storage | `STORAGE_DIR` | Mount a persistent volume there |
 
 ## Deployment
 

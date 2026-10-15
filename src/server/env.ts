@@ -23,6 +23,10 @@ const schema = z.object({
   WHATSAPP_ACCESS_TOKEN: z.string().optional(),
   WHATSAPP_APP_SECRET: z.string().optional(),
   WHATSAPP_VERIFY_TOKEN: z.string().optional(),
+  /** Name of the approved WhatsApp template with one body variable ({{1}}) that carries the message. */
+  WHATSAPP_TEMPLATE: z.string().default("church_announcement"),
+  /** What one SMS unit costs a church, in kobo. */
+  SMS_UNIT_PRICE_KOBO: z.coerce.number().int().positive().default(400),
   /** "fake" runs a built-in checkout page instead of Paystack. Refused in production unless test hooks are on. */
   PAYMENTS_PROVIDER: z.enum(["fake", "paystack"]).default("fake"),
   PAYSTACK_SECRET_KEY: z.string().optional(),

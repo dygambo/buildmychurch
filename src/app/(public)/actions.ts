@@ -1,4 +1,5 @@
 "use server";
+import { unsubscribe } from "@/server/services/messaging";
 import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { db, withOrg } from "@/server/db";
@@ -112,6 +113,15 @@ export async function fakePayAction(reference: string, outcome: "pay" | "decline
   const [i] = await db.select().from(paymentIntents).where(eq(paymentIntents.reference, reference));
   if (!i) throw new Error("Unknown payment.");
   await fakeCheckout(reference, outcome);
+  if (i.purpose === "sms_topup") redirect(`/messages/wallet?ref=${encodeURIComponent(reference)}`);
   const [o] = await db.select({ slug: organisations.slug }).from(organisations).where(eq(organisations.id, i.orgId));
   redirect(`/give/${o!.slug}/thanks?reference=${encodeURIComponent(reference)}`);
+}
+
+/** One-click unsubscribe from an email footer. Confirmed with a button so link scanners can't trigger it. */
+export async function unsubscribeAction(token: string) {
+  const ip = await clientIp();
+  if (!(await rateLimit(`unsub:${ip}`, 30, 3600))) throw new Error("Too many attempts. Try again later.");
+  await unsubscribe(token);
+  redirect(`/u/${encodeURIComponent(token)}?done=1`);
 }

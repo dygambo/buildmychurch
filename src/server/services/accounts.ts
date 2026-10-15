@@ -3,6 +3,8 @@ import { db, withOrg } from "../db";
 import { authTokens, branches, memberships, organisations, roles, users } from "../db/schema";
 import { createDefaultFunds } from "./giving";
 import { createDefaultCategories } from "./expenses";
+import { grantWelcomeUnits, STARTER_TEMPLATES } from "./messaging";
+import { messageTemplates } from "../db/schema";
 import { DEFAULT_ROLES } from "../auth/permissions";
 import { hashPassword, passwordProblem, verifyPassword } from "../auth/password";
 import { decrypt, encrypt, randomToken, sha256 } from "../crypto";
@@ -95,6 +97,8 @@ export async function signUp(input: SignUpInput) {
     await tx.insert(branches).values({ orgId: org!.id, name: "Headquarters", code: "HQ", path: "hq", level: "hq" });
     await createDefaultFunds(tx, org!.id);
     await createDefaultCategories(tx, org!.id);
+    await grantWelcomeUnits(tx, org!.id);
+    await tx.insert(messageTemplates).values(STARTER_TEMPLATES.map((t) => ({ ...t, orgId: org!.id })));
     await audit(
       tx,
       { user: { id: user!.id, name: user!.name }, org: { id: org!.id } },

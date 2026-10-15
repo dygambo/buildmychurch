@@ -34,7 +34,7 @@ export default async function FakeCheckout({ params }: { params: Promise<{ refer
             <FlaskConical className="size-4" /> Practice checkout
           </div>
           <div>
-            <p className="text-[13px] text-muted">Pay {org?.name}</p>
+            <p className="text-[13px] text-muted">{intent.purpose === "sms_topup" ? "SMS units for" : "Pay"} {org?.name}</p>
             <p className="tabular text-3xl font-semibold">{naira(intent.amountKobo)}</p>
             <p className="text-xs text-faint">{intent.email}</p>
           </div>

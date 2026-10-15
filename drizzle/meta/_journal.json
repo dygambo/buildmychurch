@@ -64,6 +64,20 @@
       "when": 1792076872872,
       "tag": "0008_expenses_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792078538972,
+      "tag": "0009_messaging",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792078540520,
+      "tag": "0010_messaging_rls",
+      "breakpoints": true
     }
   ]
 }

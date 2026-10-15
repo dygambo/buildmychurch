@@ -623,7 +623,7 @@ export async function listExpenses(tx: Tx, ctx: Actor, f: ExpenseFilters) {
       categoryColor: expenseCategories.color,
       branchName: branches.name,
       fundName: givingFunds.name,
-      files: sql<number>`(select count(*)::int from files f where f.entity_type = 'expense' and f.entity_id = ${expenses.id} and f.deleted_at is null)`,
+      files: sql<number>`(select count(*)::int from files f where f.entity_type = 'expense' and f.entity_id = expenses.id and f.deleted_at is null)`,
     })
     .from(expenses)
     .innerJoin(expenseCategories, eq(expenseCategories.id, expenses.categoryId))

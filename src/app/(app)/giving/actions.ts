@@ -138,6 +138,7 @@ export const receiptSettingsAction = orgAction(
     perm: "giving.verify",
     schema: z.object({
       receiptsForOffline: z.boolean(),
+      smsReceipts: z.boolean(),
       thankYouMessage: z
         .string()
         .trim()

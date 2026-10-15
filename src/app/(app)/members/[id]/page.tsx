@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Download, Lock, Mail, MessageCircle, Phone, ShieldCheck, ShieldOff } from "lucide-react";
+import { ArrowLeft, Download, Lock, Mail, MessageCircle, MessageSquareText, Phone, ShieldCheck, ShieldOff } from "lucide-react";
 import { requireCtx } from "@/server/auth/context";
 import { withOrg } from "@/server/db";
 import { getMember } from "@/server/services/members";
@@ -9,6 +9,7 @@ import { listBranches } from "@/server/services/org";
 import { listTags } from "@/server/services/members";
 import { memberAttendance } from "@/server/services/attendance";
 import { memberGiving } from "@/server/services/giving";
+import { memberMessages } from "@/server/services/messaging";
 import { AppError } from "@/server/errors";
 import { NoAccess } from "@/components/no-access";
 import { Avatar } from "@/components/ui/avatar";
@@ -51,12 +52,13 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
       tags: await listTags(tx),
       att: ctx.can("attendance.read") ? await memberAttendance(tx, id) : null,
       giving: ctx.can("giving.read_named") ? await memberGiving(tx, ctx, id) : null,
+      msgs: ctx.can("messaging.send") ? await memberMessages(tx, id) : null,
     }));
   } catch (e) {
     if (e instanceof AppError) notFound();
     throw e;
   }
-  const { m, branches, tags, att, giving } = data;
+  const { m, branches, tags, att, giving, msgs } = data;
   const name = fullName(m);
   const age = m.dobYear && m.dobMonth && m.dobDay ? ageOn(m.dobYear, m.dobMonth, m.dobDay) : null;
   const wa = m.phone ? `https://wa.me/${m.phone.replace("+", "")}` : null;
@@ -101,6 +103,14 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
                 <MessageCircle className="size-4" /> WhatsApp
               </a>
             </>
+          )}
+          {msgs && (m.phone || m.email) && (
+            <Link
+              href={`/messages/new?channel=${m.phone ? "sms" : "email"}&to=${m.id}`}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3 text-[13px] font-medium hover:bg-surface-2"
+            >
+              <MessageSquareText className="size-4" /> Message
+            </Link>
           )}
           {ctx.can("followup.manage") && <StartFollowup memberId={m.id} firstTimer={m.stage === "first_timer"} />}
           {canWrite && (
@@ -205,6 +215,25 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
         </div>
 
         <div className="flex flex-col gap-4">
+          {msgs && msgs.length > 0 && (
+            <Card>
+              <CardHeader title="Recent messages" />
+              <CardBody className="flex flex-col gap-2.5">
+                {msgs.slice(0, 5).map((x) => (
+                  <div key={x.id} className="text-[13px]">
+                    <div className="flex items-center justify-between gap-2 text-xs text-faint">
+                      <span className="uppercase">{x.channel === "whatsapp" ? "WhatsApp" : x.channel}</span>
+                      <span>
+                        {x.status === "skipped" ? "Not sent" : x.status === "delivered" ? "Delivered" : x.status === "failed" ? "Failed" : "Sent"} ·{" "}
+                        {timeAgo(x.createdAt)}
+                      </span>
+                    </div>
+                    <p className="line-clamp-2 text-muted">{x.subject ? `${x.subject}: ` : ""}{x.body}</p>
+                  </div>
+                ))}
+              </CardBody>
+            </Card>
+          )}
           {giving && (
             <Card>
               <CardHeader

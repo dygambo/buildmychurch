@@ -40,3 +40,18 @@ every(60, async (now) => {
   for (const o of orgs)
     await enqueue(db, "finance.remittances", { period }, { orgId: o.id, dedupeKey: `remittances:${o.id}:${period}` });
 });
+
+// 7am every day: automatic messages (birthdays, anniversaries, welcomes, pledge reminders) for each church.
+every(60, async (now) => {
+  const c = lagosClock(now);
+  if (c.hour !== 7) return;
+  const orgs = await db.select({ id: organisations.id }).from(organisations);
+  for (const o of orgs)
+    await enqueue(db, "messaging.automations", { date: c.date }, { orgId: o.id, dedupeKey: `automations:${o.id}:${c.date}` });
+});
+
+// Every 15 minutes: put back messages a crashed worker left half-sent.
+every(15, async (now) => {
+  const slot = Math.floor(now.getTime() / (15 * 60_000));
+  await enqueue(db, "messages.requeue", {}, { dedupeKey: `messages-requeue:${slot}`, maxAttempts: 1 });
+});

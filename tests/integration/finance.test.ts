@@ -313,7 +313,7 @@ describe("row-level security", () => {
       where n.nspname = 'public' and c.relkind = 'r'
         and exists (select 1 from information_schema.columns k where k.table_schema = 'public' and k.table_name = c.relname and k.column_name = 'org_id')`;
     // tables that are looked up before the church is known (webhooks, public links, job queue, logins)
-    const exempt = new Set(["payment_intents", "public_links", "jobs", "memberships", "roles", "sessions", "invitations", "rate_limits", "auth_tokens"]);
+    const exempt = new Set(["payment_intents", "public_links", "jobs", "memberships", "roles", "sessions", "invitations", "rate_limits", "auth_tokens", "message_refs"]);
     const missing = rows.filter((r) => !r.rls && !exempt.has(r.table)).map((r) => r.table);
     expect(missing).toEqual([]);
   });

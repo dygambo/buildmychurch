@@ -157,7 +157,7 @@ export async function startFromTemplates(tx: Tx, ctx: Actor, date: string) {
   return ids;
 }
 
-const presentCount = sql<number>`(select count(*)::int from ${attendance} a where a.service_id = ${services.id})`;
+const presentCount = sql<number>`(select count(*)::int from ${attendance} a where a.service_id = services.id)`;
 
 export async function listServices(tx: Tx, ctx: Actor, opts: { from?: string; to?: string; limit?: number } = {}) {
   // people who check others in need the list of services too

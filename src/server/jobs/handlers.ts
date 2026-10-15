@@ -2,3 +2,4 @@
 import "./email-job";
 import "./followup-jobs";
 import "./payment-jobs";
+import "./messaging-jobs";
