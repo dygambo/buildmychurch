@@ -14,6 +14,31 @@ messaging (SMS, email, WhatsApp) and multi-branch oversight. Built to protect me
 | Background work | A Postgres-backed job queue (`SKIP LOCKED`) and a worker process |
 | Tests | Vitest (unit and integration against a real database), Playwright (browser, desktop and mobile) |
 
+## Try it with Docker
+
+The quickest way to look around: with [Docker Desktop](https://www.docker.com/products/docker-desktop/) running, from this folder run
+
+```bash
+docker compose -f docker-compose.demo.yml up --build
+```
+
+The first run takes a few minutes. When the log says `Ready`, open http://localhost:3000. It loads a demo church (Grace Assembly Lagos) with test accounts for every role. All use the password `Grace-Assembly-2026`:
+
+| Email | Role |
+| --- | --- |
+| demo@buildmychurch.com | Super Admin (owner) |
+| pastor@graceassembly.ng | Senior Pastor |
+| secretary@graceassembly.ng | Church Administrator (memo approver) |
+| finance@graceassembly.ng | Finance Officer |
+| counter@graceassembly.ng | Counting team |
+| coordinator@graceassembly.ng | Service Coordinator |
+| hod@graceassembly.ng | Head of Department |
+| followup@graceassembly.ng | Follow-up and care |
+| children@graceassembly.ng | Children's ministry |
+| worker@graceassembly.ng | Worker (usher) |
+
+Emails and SMS aren't sent anywhere: read them at http://localhost:3000/dev/mailbox. Payments use a practice checkout. The member page link is in Settings; sign in there as `member@graceassembly.ng` and take the code from the mailbox. Stop with Ctrl+C; `docker compose -f docker-compose.demo.yml down -v` deletes the demo data.
+
 ## Getting started
 
 Requirements: Node.js 20.11+ and PostgreSQL 16 (or Docker).

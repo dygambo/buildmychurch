@@ -28,6 +28,8 @@ import {
 import { givingTransactions, jobs, members, messageCampaigns, messages, scheduleVersions, smsLedger } from "@/server/db/schema";
 import { approveMemo, memoSchema, queryMemo, saveMemo, saveRoute as saveMemoRoute, submitMemo } from "@/server/services/memos";
 import { randomUUID } from "node:crypto";
+import { blindIndex, encrypt } from "@/server/crypto";
+import { rotaSlots as rotaSlotsT } from "@/server/db/schema";
 import { deskSchema, eventSchema, registerAtDesk, saveEvent, setEventStatus } from "@/server/services/events";
 import { autoFill, fillSchema, sundays } from "@/server/services/rota";
 import { addEntry, addPrayer, caseSchema, entrySchema, markPrayed, prayerLink, prayerSchema, publicPrayerSchema, saveCase, submitPublicPrayer, updatePrayer } from "@/server/services/care";
@@ -70,7 +72,7 @@ import {
   saveOpeningBalances,
   submitExpense,
 } from "@/server/services/expenses";
-import { and, asc, inArray, isNull } from "drizzle-orm";
+import { and, asc, inArray, isNull, sql } from "drizzle-orm";
 
 /**
  * Creates a demo church with branches, departments, home cells and about 120 members.
@@ -457,7 +459,15 @@ async function main() {
   await seedMemos(r.orgId, row!.u.id);
   await seedEvents(r.orgId, row!.u.id);
   await seedCare(r.orgId, row!.u.id);
-  console.log(`Demo church created with 120 members.\nSign in with ${DEMO.email} / ${DEMO.password}`);
+  await seedTestAccounts(r.orgId);
+  console.log(`Demo church created with 120 members. Every account below uses the password ${DEMO.password}`);
+  console.table([
+    { email: DEMO.email, role: "Super Admin (owner)" },
+    { email: "finance@graceassembly.ng", role: "Finance Officer" },
+    { email: "secretary@graceassembly.ng", role: "Church Administrator" },
+    ...TEST_ACCOUNTS.map((a) => ({ email: a.email, role: a.title })),
+  ]);
+  console.log(`Member page: /m/<church> — sign in as ${PORTAL_MEMBER_EMAIL}; the code appears in /dev/mailbox.`);
 }
 
 async function actorFor(userId: string, orgId: string) {
@@ -1064,6 +1074,34 @@ async function seedCare(orgId: string, ownerId: string) {
   const depts = ["Media", "Choir", "Ushering", "Media", "Protocol", "Children's Church"];
   for (const [i, p] of people.slice(0, 6).entries())
     await submitForm(ftoken, { [q("short")]: `${p.first} ${p.last}`, [q("phone")]: `0807555${String(1000 + i)}`, [q("choice")]: depts[i], [q("yesno")]: i % 3 ? "Yes" : "No" });
+}
+
+/** One sign-in for each built-in role, so every view of the app can be tried, plus a member for the member page. */
+export const TEST_ACCOUNTS = [
+  { role: "pastor", email: "pastor@graceassembly.ng", name: "Rev. Dr. Femi Adeyemi", title: "Senior Pastor" },
+  { role: "coordinator", email: "coordinator@graceassembly.ng", name: "Bro. Chidi Okafor", title: "Service Coordinator" },
+  { role: "hod", email: "hod@graceassembly.ng", name: "Dcn. Musa Ibrahim", title: "Head of Ushering" },
+  { role: "counter", email: "counter@graceassembly.ng", name: "Sis. Ngozi Eze", title: "Counting Team" },
+  { role: "followup", email: "followup@graceassembly.ng", name: "Sis. Funke Bello", title: "Follow-up and Care" },
+  { role: "children", email: "children@graceassembly.ng", name: "Sis. Amaka Obi", title: "Children's Church Coordinator" },
+  { role: "worker", email: "worker@graceassembly.ng", name: "Bro. Tobi Lawal", title: "Usher" },
+] as const;
+export const PORTAL_MEMBER_EMAIL = "member@graceassembly.ng";
+
+async function seedTestAccounts(orgId: string) {
+  const pw = await hashPassword(DEMO.password);
+  for (const a of TEST_ACCOUNTS) {
+    const [role] = await db.select({ id: roles.id }).from(roles).where(and(eq(roles.orgId, orgId), eq(roles.key, a.role)));
+    if (!role) continue;
+    const [u] = await db.insert(users).values({ email: a.email, name: a.name, passwordHash: pw }).returning({ id: users.id });
+    await db.insert(memberships).values({ orgId, userId: u!.id, roleId: role.id, title: a.title });
+  }
+  // a member who serves on the rota and gives, with a known email for the member page
+  await withOrg(orgId, async (tx) => {
+    const [slot] = await tx.select({ memberId: rotaSlotsT.memberId }).from(rotaSlotsT).where(sql`${rotaSlotsT.memberId} is not null`).limit(1);
+    if (slot?.memberId)
+      await tx.update(members).set({ emailEnc: encrypt(PORTAL_MEMBER_EMAIL), emailHash: blindIndex(PORTAL_MEMBER_EMAIL) }).where(eq(members.id, slot.memberId));
+  });
 }
 
 main()
