@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, ilike, isNull, or, sql, gt } from "drizzle-orm";
 import type { Tx } from "../db";
 import { auditLogs, authTokens, branches, memberships, organisations, roles, users } from "../db/schema";
-import type { Ctx } from "../auth/context";
+import type { Actor } from "../auth/context";
 import { assertCan } from "../auth/context";
 import { ALL_PERMISSIONS, type Permission } from "../auth/permissions";
 import { audit, diff } from "../audit";
@@ -14,14 +14,14 @@ import { env } from "../env";
 import { normalizeNgPhone } from "@/lib/phone";
 
 /* ---------- church profile ---------- */
-export async function getOrg(tx: Tx, ctx: Ctx) {
+export async function getOrg(tx: Tx, ctx: Actor) {
   const [o] = await tx.select().from(organisations).where(eq(organisations.id, ctx.org.id));
   return o!;
 }
 
 export async function updateOrg(
   tx: Tx,
-  ctx: Ctx,
+  ctx: Actor,
   input: {
     name: string;
     denomination?: string;
@@ -76,7 +76,7 @@ export async function listBranches(tx: Tx, includeArchived = false) {
 
 export async function saveBranch(
   tx: Tx,
-  ctx: Ctx,
+  ctx: Actor,
   input: {
     id?: string;
     name: string;
@@ -143,7 +143,7 @@ export async function saveBranch(
   return b!.id;
 }
 
-export async function archiveBranch(tx: Tx, ctx: Ctx, id: string, archived: boolean) {
+export async function archiveBranch(tx: Tx, ctx: Actor, id: string, archived: boolean) {
   assertCan(ctx, "branches.manage", "manage branches");
   const [b] = await tx.select().from(branches).where(eq(branches.id, id));
   if (!b) throw notFound("That branch");
@@ -161,7 +161,7 @@ export async function archiveBranch(tx: Tx, ctx: Ctx, id: string, archived: bool
 }
 
 /* ---------- team ---------- */
-export async function listTeam(tx: Tx, ctx: Ctx) {
+export async function listTeam(tx: Tx, ctx: Actor) {
   const people = await tx
     .select({
       m: memberships,
@@ -195,13 +195,13 @@ export async function listTeam(tx: Tx, ctx: Ctx) {
   return { people, invites };
 }
 
-export async function listRoles(tx: Tx, ctx: Ctx) {
+export async function listRoles(tx: Tx, ctx: Actor) {
   return tx.select().from(roles).where(eq(roles.orgId, ctx.org.id)).orderBy(asc(roles.createdAt));
 }
 
 export async function inviteStaff(
   tx: Tx,
-  ctx: Ctx,
+  ctx: Actor,
   input: { email: string; name: string; roleId: string; branchIds: string[]; title?: string },
 ) {
   assertCan(ctx, "users.manage", "invite staff");
@@ -248,7 +248,7 @@ export async function inviteStaff(
   return url;
 }
 
-export async function revokeInvite(tx: Tx, ctx: Ctx, id: string) {
+export async function revokeInvite(tx: Tx, ctx: Actor, id: string) {
   assertCan(ctx, "users.manage", "manage invitations");
   const [t] = await tx
     .update(authTokens)
@@ -266,7 +266,7 @@ export async function revokeInvite(tx: Tx, ctx: Ctx, id: string) {
 
 export async function updateMembership(
   tx: Tx,
-  ctx: Ctx,
+  ctx: Actor,
   input: {
     membershipId: string;
     roleId: string;
@@ -322,7 +322,7 @@ export async function updateMembership(
 
 export async function saveRole(
   tx: Tx,
-  ctx: Ctx,
+  ctx: Actor,
   input: { id?: string; name: string; description?: string; permissions: string[] },
 ) {
   assertCan(ctx, "users.manage", "edit roles");
@@ -370,7 +370,7 @@ export async function saveRole(
 }
 
 /* ---------- audit ---------- */
-export async function listAudit(tx: Tx, ctx: Ctx, f: { q?: string; page: number; pageSize: number }) {
+export async function listAudit(tx: Tx, ctx: Actor, f: { q?: string; page: number; pageSize: number }) {
   assertCan(ctx, "audit.read", "read the audit log");
   const where = f.q
     ? or(

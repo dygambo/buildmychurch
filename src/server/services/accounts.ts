@@ -186,15 +186,13 @@ export async function createPasswordReset(
   const [u] = await db.select().from(users).where(eq(users.email, email)).limit(1);
   if (!u) return null;
   const token = randomToken(32);
-  await db
-    .insert(authTokens)
-    .values({
-      userId: u.id,
-      email,
-      purpose: "password_reset",
-      tokenHash: sha256(token),
-      expiresAt: new Date(Date.now() + 60 * 60000),
-    });
+  await db.insert(authTokens).values({
+    userId: u.id,
+    email,
+    purpose: "password_reset",
+    tokenHash: sha256(token),
+    expiresAt: new Date(Date.now() + 60 * 60000),
+  });
   return { token, user: { id: u.id, name: u.name, email: u.email } };
 }
 
@@ -303,15 +301,13 @@ export async function acceptInvite(token: string, password: string, name?: strin
         .set({ roleId: inv.data.roleId, branchIds: inv.data.branchIds, status: "active", title: inv.data.title })
         .where(eq(memberships.id, existing.id));
     else
-      await tx
-        .insert(memberships)
-        .values({
-          orgId: inv.orgId,
-          userId: u!.id,
-          roleId: inv.data.roleId,
-          branchIds: inv.data.branchIds,
-          title: inv.data.title,
-        });
+      await tx.insert(memberships).values({
+        orgId: inv.orgId,
+        userId: u!.id,
+        roleId: inv.data.roleId,
+        branchIds: inv.data.branchIds,
+        title: inv.data.title,
+      });
     await tx.update(authTokens).set({ usedAt: new Date() }).where(eq(authTokens.id, inv.tokenId));
     await audit(
       tx,

@@ -35,7 +35,11 @@ const subscribeTheme = (cb: () => void) => {
 };
 
 function ThemeToggle() {
-  const dark = useSyncExternalStore(subscribeTheme, () => document.documentElement.classList.contains("dark"), () => false);
+  const dark = useSyncExternalStore(
+    subscribeTheme,
+    () => document.documentElement.classList.contains("dark"),
+    () => false,
+  );
   return (
     <button
       type="button"
