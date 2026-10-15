@@ -1,19 +1,20 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Lock, Mail, MessageCircle, Phone, ShieldCheck, ShieldOff } from "lucide-react";
+import { ArrowLeft, Download, Lock, Mail, MessageCircle, Phone, ShieldCheck, ShieldOff } from "lucide-react";
 import { requireCtx } from "@/server/auth/context";
 import { withOrg } from "@/server/db";
 import { getMember } from "@/server/services/members";
 import { listBranches } from "@/server/services/org";
 import { listTags } from "@/server/services/members";
 import { memberAttendance } from "@/server/services/attendance";
+import { memberGiving } from "@/server/services/giving";
 import { AppError } from "@/server/errors";
 import { NoAccess } from "@/components/no-access";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader, Note } from "@/components/ui/card";
-import { formatDate, formatDateTime, fullName, timeAgo } from "@/lib/format";
+import { formatDate, formatDateTime, fullName, naira, timeAgo } from "@/lib/format";
 import { formatPhone, localPhone } from "@/lib/phone";
 import { MONTHS, STAGE_LABEL, STAGE_TONE, STATUS_LABEL } from "../labels";
 import { FamilyCard, ProfileActions, StartFollowup, TagEditor } from "./view";
@@ -49,12 +50,13 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
       branches: await listBranches(tx),
       tags: await listTags(tx),
       att: ctx.can("attendance.read") ? await memberAttendance(tx, id) : null,
+      giving: ctx.can("giving.read_named") ? await memberGiving(tx, ctx, id) : null,
     }));
   } catch (e) {
     if (e instanceof AppError) notFound();
     throw e;
   }
-  const { m, branches, tags, att } = data;
+  const { m, branches, tags, att, giving } = data;
   const name = fullName(m);
   const age = m.dobYear && m.dobMonth && m.dobDay ? ageOn(m.dobYear, m.dobMonth, m.dobDay) : null;
   const wa = m.phone ? `https://wa.me/${m.phone.replace("+", "")}` : null;
@@ -203,6 +205,44 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
         </div>
 
         <div className="flex flex-col gap-4">
+          {giving && (
+            <Card>
+              <CardHeader
+                title={`Giving in ${giving.year}`}
+                action={
+                  <a
+                    href={`/giving/statement/${m.id}?year=${giving.year}`}
+                    className="inline-flex items-center gap-1 text-[13px] text-accent"
+                  >
+                    <Download className="size-3.5" /> Statement
+                  </a>
+                }
+              />
+              <CardBody className="flex flex-col gap-3">
+                <div className="flex items-baseline justify-between">
+                  <b className="tabular text-xl">{naira(giving.total)}</b>
+                  <span className="text-xs text-muted">
+                    gave in {giving.monthsGiven} of {Number(new Date().toISOString().slice(5, 7))} months
+                  </span>
+                </div>
+                {giving.byFund.length ? (
+                  <ul className="flex flex-col gap-1.5 text-[13px]">
+                    {giving.byFund.map((f) => (
+                      <li key={f.fund} className="flex justify-between gap-2">
+                        <span className="text-muted">{f.fund}</span>
+                        <span className="tabular font-medium">{naira(f.amount)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-[13px] text-muted">No gifts linked to {m.firstName} this year.</p>
+                )}
+                <Link href={`/giving/transactions?q=${encodeURIComponent(`${m.firstName} ${m.lastName}`)}&status=all`} className="text-[13px] text-accent">
+                  See every gift
+                </Link>
+              </CardBody>
+            </Card>
+          )}
           {att && (
             <Card>
               <CardHeader

@@ -10,6 +10,8 @@ import { groupCounts } from "@/server/services/groups";
 import { attendanceTrend } from "@/server/services/attendance";
 import { followupCounts } from "@/server/services/followup";
 import { childStats } from "@/server/services/children";
+import { givingSettings, givingSummary } from "@/server/services/giving";
+import { naira } from "@/lib/format";
 import { Stat } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { Donut, MonthlyBars } from "@/components/charts";
@@ -37,7 +39,9 @@ export default async function DashboardPage() {
     const trend = ctx.can("attendance.read") ? await attendanceTrend(tx, ctx, 8) : null;
     const fu = ctx.can("followup.manage") ? await followupCounts(tx, ctx) : null;
     const kids = ctx.can("children.checkin") || ctx.can("children.manage") ? await childStats(tx, ctx) : null;
-    return { branches: b!.n, team: t!.n, people, groups, anyMembers: (people?.total ?? 0) > 0, trend, fu, kids };
+    const giving = ctx.can("giving.read") ? await givingSummary(tx, ctx) : null;
+    const gs = await givingSettings(tx, ctx.org.id);
+    return { branches: b!.n, team: t!.n, people, groups, anyMembers: (people?.total ?? 0) > 0, trend, fu, kids, giving, gs };
   });
   const steps = [
     {
@@ -49,14 +53,34 @@ export default async function DashboardPage() {
     { done: stats.branches > 1, label: "Add your branches", href: "/branches", icon: Building2 },
     { done: stats.team > 1, label: "Invite your team", href: "/settings/team", icon: UserPlus },
     { done: stats.anyMembers, label: "Import or add your members", href: "/members", icon: Upload },
-    { done: false, label: "Set up online giving", href: "/giving", icon: HandCoins },
+    {
+      done: !!stats.gs.subaccountCode,
+      label: "Set up online giving",
+      href: "/giving/settings",
+      icon: HandCoins,
+    },
   ];
   const first = firstName(ctx.user.name);
   return (
     <>
       <PageHeader title={`${greeting()}, ${first}`} description={`Here is how ${ctx.org.name} is doing.`} />
-      {(stats.trend || stats.fu || stats.kids) && (
+      {(stats.trend || stats.fu || stats.kids || stats.giving) && (
         <div className="grid grid-cols-4 gap-3 max-lg:grid-cols-2">
+          {stats.giving && (
+            <Stat
+              label="Giving this month"
+              value={naira(stats.giving.mtd, { compact: stats.giving.mtd >= 1_000_000_000 })}
+              sub={
+                stats.giving.prevSamePoint ? (
+                  `${stats.giving.mtd >= stats.giving.prevSamePoint ? "+" : ""}${Math.round(((stats.giving.mtd - stats.giving.prevSamePoint) / stats.giving.prevSamePoint) * 100)}% on the same point last month`
+                ) : (
+                  <Link href="/giving" className="text-accent">
+                    Open giving
+                  </Link>
+                )
+              }
+            />
+          )}
           {stats.trend && (
             <Stat
               label="Last Sunday"

@@ -8,6 +8,12 @@ import { AppError } from "@/server/errors";
 import { rateLimit } from "@/server/rate-limit";
 import { clientIp } from "@/server/request";
 import { readCheckinLink, selfCheckIn } from "@/server/services/attendance";
+import { createOnlineGift, failOnlineGift, onlineGiftSchema } from "@/server/services/giving";
+import { initializePayment, paymentsProvider } from "@/server/providers/payments";
+import { fakeCheckout } from "@/server/services/payments";
+import { paymentIntents } from "@/server/db/schema";
+import { env } from "@/server/env";
+import { redirect } from "next/navigation";
 import { submitVisitorCard, visitorSchema } from "@/server/services/followup";
 
 async function guard<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
@@ -58,4 +64,54 @@ export async function visitorCardAction(input: { token: string; values: Record<s
       return submitVisitorCard(tx, org!, link.targetId ?? hq!.id, input.values as z.input<typeof visitorSchema>);
     });
   });
+}
+
+/** Starts an online gift and returns the checkout address to send the giver to. */
+export async function startGiftAction(input: { slug: string; values: Record<string, unknown> }) {
+  return guard(async () => {
+    const ip = await clientIp();
+    if (!(await rateLimit(`give:${ip}`, 20, 3600)))
+      throw new AppError("Too many attempts from this phone in the last hour. Please try again later.");
+    const parsed = onlineGiftSchema.safeParse(input.values);
+    if (!parsed.success) throw new AppError("Please check the highlighted fields.", zodFieldErrors(parsed.error));
+    const [org] = await db
+      .select({ id: organisations.id, status: organisations.status })
+      .from(organisations)
+      .where(eq(organisations.slug, String(input.slug)));
+    if (!org || org.status === "suspended") throw new AppError("This giving page isn't available.");
+    paymentsProvider(); // refuses early if payments aren't set up for a live site
+    const gift = await withOrg(org.id, (tx) => createOnlineGift(tx, org.id, parsed.data));
+    try {
+      const { authorizationUrl } = await initializePayment({
+        reference: gift.reference,
+        amountKobo: gift.amountKobo,
+        email: parsed.data.email,
+        callbackUrl: `${env().APP_URL}/give/${input.slug}/thanks`,
+        subaccount: gift.subaccount,
+        metadata: { purpose: "gift", church: input.slug },
+      });
+      return { url: authorizationUrl, reference: gift.reference };
+    } catch (e) {
+      // the checkout never opened: close the pending gift so it doesn't linger
+      await db
+        .update(paymentIntents)
+        .set({ status: "failed", failureReason: (e as Error).message })
+        .where(eq(paymentIntents.reference, gift.reference));
+      const [i] = await db.select().from(paymentIntents).where(eq(paymentIntents.reference, gift.reference));
+      if (i) await withOrg(org.id, (tx) => failOnlineGift(tx, i.targetId));
+      throw e;
+    }
+  });
+}
+
+/** The built-in test checkout (development and automated tests only). */
+export async function fakePayAction(reference: string, outcome: "pay" | "decline") {
+  if (paymentsProvider() !== "fake") throw new Error("Test checkout is switched off.");
+  const ip = await clientIp();
+  if (!(await rateLimit(`fakepay:${ip}`, 60, 600))) throw new Error("Too many attempts.");
+  const [i] = await db.select().from(paymentIntents).where(eq(paymentIntents.reference, reference));
+  if (!i) throw new Error("Unknown payment.");
+  await fakeCheckout(reference, outcome);
+  const [o] = await db.select({ slug: organisations.slug }).from(organisations).where(eq(organisations.id, i.orgId));
+  redirect(`/give/${o!.slug}/thanks?reference=${encodeURIComponent(reference)}`);
 }

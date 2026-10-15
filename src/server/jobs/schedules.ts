@@ -23,3 +23,9 @@ every(60, async (now) => {
   for (const o of orgs)
     await enqueue(db, "followup.absentees", {}, { orgId: o.id, dedupeKey: `absentees:${o.id}:${c.date}` });
 });
+
+// Every 15 minutes: re-check online payments still waiting for confirmation (one job per slot, across all churches).
+every(15, async (now) => {
+  const slot = Math.floor(now.getTime() / (15 * 60_000));
+  await enqueue(db, "payments.reconcile", {}, { dedupeKey: `payments-reconcile:${slot}`, maxAttempts: 1 });
+});

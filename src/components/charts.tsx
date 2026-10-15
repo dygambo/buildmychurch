@@ -100,3 +100,53 @@ export function Donut({
     </div>
   );
 }
+
+/** Stacked bars: one bar per label, one coloured segment per series (e.g. giving by fund each week). */
+export function StackedBars({
+  data,
+  series,
+  height = 240,
+  format = (v: number) => v.toLocaleString("en-NG"),
+  label,
+}: {
+  data: Record<string, number | string>[];
+  series: { key: string; name: string; color: string }[];
+  height?: number;
+  format?: (v: number) => string;
+  label: string;
+}) {
+  return (
+    <div style={{ height }} role="img" aria-label={label}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
+          <CartesianGrid vertical={false} stroke="var(--line)" />
+          <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} stroke="var(--faint)" />
+          <YAxis
+            tickLine={false}
+            axisLine={false}
+            fontSize={11}
+            stroke="var(--faint)"
+            width={56}
+            tickFormatter={(v) => format(Number(v))}
+          />
+          <Tooltip
+            cursor={{ fill: "var(--surface-2)" }}
+            contentStyle={tooltipStyle}
+            formatter={(v, n) => [format(Number(v)), n]}
+          />
+          {series.map((s, i) => (
+            <Bar
+              key={s.key}
+              dataKey={s.key}
+              name={s.name}
+              stackId="a"
+              fill={s.color}
+              maxBarSize={32}
+              radius={i === series.length - 1 ? [5, 5, 0, 0] : [0, 0, 0, 0]}
+            />
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}

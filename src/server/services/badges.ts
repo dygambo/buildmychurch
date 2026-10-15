@@ -1,7 +1,7 @@
-import { and, count, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, count, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import type { Ctx } from "../auth/context";
 import { withOrg } from "../db";
-import { childCheckins, followups } from "../db/schema";
+import { childCheckins, followups, givingBatches } from "../db/schema";
 
 type Badges = Record<string, { count: number; tone?: "accent" | "bad" }>;
 
@@ -20,6 +20,19 @@ export async function navBadges(ctx: Ctx): Promise<Badges> {
     if (ctx.can("children.checkin")) {
       const [here] = await tx.select({ n: count() }).from(childCheckins).where(isNull(childCheckins.checkedOutAt));
       if (here && Number(here.n) > 0) out["/children"] = { count: Number(here.n) };
+    }
+    if (ctx.can("giving.verify")) {
+      const [waiting] = await tx
+        .select({ n: count() })
+        .from(givingBatches)
+        .where(
+          and(
+            eq(givingBatches.status, "submitted"),
+            ne(givingBatches.countedBy, ctx.user.id),
+            ctx.branchIds.length ? inArray(givingBatches.branchId, ctx.branchIds) : undefined,
+          ),
+        );
+      if (waiting && Number(waiting.n) > 0) out["/giving"] = { count: Number(waiting.n), tone: "accent" };
     }
     return out;
   });

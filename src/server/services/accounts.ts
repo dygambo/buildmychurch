@@ -1,6 +1,7 @@
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { db, withOrg } from "../db";
 import { authTokens, branches, memberships, organisations, roles, users } from "../db/schema";
+import { createDefaultFunds } from "./giving";
 import { DEFAULT_ROLES } from "../auth/permissions";
 import { hashPassword, passwordProblem, verifyPassword } from "../auth/password";
 import { decrypt, encrypt, randomToken, sha256 } from "../crypto";
@@ -91,6 +92,7 @@ export async function signUp(input: SignUpInput) {
     // Branch rows are protected by row-level security, so scope this part of the transaction to the new church.
     await tx.execute(sql`select set_config('app.org_id', ${org!.id}, true)`);
     await tx.insert(branches).values({ orgId: org!.id, name: "Headquarters", code: "HQ", path: "hq", level: "hq" });
+    await createDefaultFunds(tx, org!.id);
     await audit(
       tx,
       { user: { id: user!.id, name: user!.name }, org: { id: org!.id } },

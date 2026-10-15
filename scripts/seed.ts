@@ -4,6 +4,7 @@ import { signUp } from "@/server/services/accounts";
 import { closeDb, db, withOrg } from "@/server/db";
 import { branches, memberships, organisations, roles, users } from "@/server/db/schema";
 import { makeActor } from "@/server/auth/context";
+import { hashPassword } from "@/server/auth/password";
 import type { Permission } from "@/server/auth/permissions";
 import { saveBranch } from "@/server/services/org";
 import { createMember, linkHousehold, setMemberTags } from "@/server/services/members";
@@ -11,6 +12,21 @@ import { addToGroup, saveGroup, setGroupRole } from "@/server/services/groups";
 import { checkIn, createService, lagosToday, recordHeadcount, saveTemplate } from "@/server/services/attendance";
 import { addNote, getVisitorLink, listFollowups, moveFollowup, submitVisitorCard } from "@/server/services/followup";
 import { checkInChild, checkOutChild, getChild, registerChild } from "@/server/services/children";
+import {
+  addPledge,
+  batchLinesSchema,
+  campaignSchema,
+  createBatch,
+  listFunds,
+  pledgeSchema,
+  saveBatchLines,
+  saveCampaign,
+  submitBatch,
+  updateGivingSettings,
+  verifyBatch,
+} from "@/server/services/giving";
+import { givingTransactions, members } from "@/server/db/schema";
+import { and, asc, isNull } from "drizzle-orm";
 
 /**
  * Creates a demo church with branches, departments, home cells and about 120 members.
@@ -391,7 +407,155 @@ async function main() {
         });
     }
   });
+  await seedGiving(r.orgId, row!.u.id);
   console.log(`Demo church created with 120 members.\nSign in with ${DEMO.email} / ${DEMO.password}`);
+}
+
+async function actorFor(userId: string, orgId: string) {
+  const [row] = await db
+    .select({ m: memberships, r: roles, o: organisations, u: users })
+    .from(memberships)
+    .innerJoin(roles, eq(roles.id, memberships.roleId))
+    .innerJoin(organisations, eq(organisations.id, memberships.orgId))
+    .innerJoin(users, eq(users.id, memberships.userId))
+    .where(and(eq(memberships.userId, userId), eq(memberships.orgId, orgId)));
+  return makeActor({
+    user: { id: row!.u.id, name: row!.u.name, email: row!.u.email, mfaEnabled: false },
+    org: {
+      id: row!.o.id,
+      name: row!.o.name,
+      slug: row!.o.slug,
+      plan: row!.o.plan,
+      smsSenderId: null,
+      timezone: row!.o.timezone,
+    },
+    membership: {
+      id: row!.m.id,
+      roleId: row!.r.id,
+      roleKey: row!.r.key,
+      roleName: row!.r.name,
+      title: null,
+      staffId: null,
+      phone: null,
+    },
+    perms: new Set(row!.r.permissions as Permission[]),
+    branchIds: [],
+  });
+}
+
+/** Ten Sundays of counted, verified collections, a few online gifts, one project with pledges, and this week's draft. */
+async function seedGiving(orgId: string, ownerId: string) {
+  const [financeRole] = await db
+    .select({ id: roles.id })
+    .from(roles)
+    .where(and(eq(roles.orgId, orgId), eq(roles.key, "finance")));
+  const [fin] = await db
+    .insert(users)
+    .values({ email: "finance@graceassembly.ng", name: "Bisi Adewale", passwordHash: await hashPassword(DEMO.password) })
+    .returning({ id: users.id });
+  await db.insert(memberships).values({ orgId, userId: fin!.id, roleId: financeRole!.id, title: "Church Accountant" });
+  const owner = await actorFor(ownerId, orgId);
+  const counter = await actorFor(fin!.id, orgId);
+
+  await withOrg(orgId, async (tx) => {
+    // offline receipts would email every seeded member; switch them on after seeding
+    await updateGivingSettings(tx, owner, { receiptsForOffline: false });
+    const funds = await listFunds(tx);
+    const f = Object.fromEntries(funds.map((x) => [x.code, x.id])) as Record<string, string>;
+    const [hq] = await tx.select().from(branches).orderBy(asc(branches.createdAt)).limit(1);
+    const people = await tx
+      .select({ id: members.id, first: members.firstName, last: members.lastName })
+      .from(members)
+      .where(isNull(members.deletedAt))
+      .limit(60);
+
+    const camp = await saveCampaign(
+      tx,
+      owner,
+      campaignSchema.parse({
+        name: "New Sanctuary Project",
+        description: "A 2,000-seat sanctuary on the Lekki site, with children's wing and car park.",
+        fundId: f.BUILDING,
+        goal: "50000000",
+        showOnline: true,
+      }),
+    );
+    for (const p of people.slice(0, 14))
+      await addPledge(
+        tx,
+        owner,
+        pledgeSchema.parse({
+          campaignId: camp,
+          memberId: p.id,
+          amount: String(pick([100000, 250000, 500000, 1000000, 2000000])),
+        }),
+      );
+
+    const today = new Date();
+    const sunday = new Date(today.getTime() - today.getUTCDay() * 86400000);
+    for (let w = 10; w >= 0; w--) {
+      const day = new Date(sunday.getTime() - w * 7 * 86400000).toISOString().slice(0, 10);
+      const growth = 1 + (10 - w) * 0.025;
+      const b = await createBatch(tx, counter, {
+        branchId: hq!.id,
+        kind: "service",
+        serviceId: null,
+        label: "Sunday Celebration Service",
+        givenOn: day,
+      });
+      const amt = (base: number) => String(Math.round((base * growth * (0.85 + rand() * 0.3)) / 100) * 100);
+      const named = people.slice(0, 60).filter(() => rand() < 0.35);
+      await saveBatchLines(
+        tx,
+        counter,
+        b,
+        batchLinesSchema.parse({
+          lines: [
+            { fundId: f.OFFERING, channel: "cash", amount: amt(420000) },
+            { fundId: f.OFFERING, channel: "pos", amount: amt(160000) },
+            { fundId: f.TITHE, channel: "cash", amount: amt(380000) },
+            { fundId: f.THANKS, channel: "cash", amount: amt(90000) },
+            { fundId: f.WELFARE, channel: "cash", amount: amt(30000) },
+            ...named.map((p) => ({
+              fundId: rand() < 0.75 ? f.TITHE : f.BUILDING,
+              channel: rand() < 0.6 ? "transfer" : "cash",
+              amount: String(pick([5000, 10000, 15000, 20000, 25000, 50000, 75000, 100000])),
+              memberId: p.id,
+            })),
+          ],
+        }),
+      );
+      if (w === 0) continue; // this Sunday's count stays a draft
+      await submitBatch(tx, counter, b);
+      if (w === 1) continue; // last Sunday waits for the second signature
+      await verifyBatch(tx, owner, b);
+    }
+
+    // online gifts through the giving page
+    let n = 0;
+    for (let d = 70; d >= 1; d -= 2) {
+      const p = people[Math.floor(rand() * people.length)]!;
+      const amount = pick([2000, 5000, 10000, 20000, 50000]) * 100;
+      const anon = rand() < 0.15;
+      await tx.insert(givingTransactions).values({
+        orgId,
+        branchId: hq!.id,
+        fundId: pick([f.TITHE, f.TITHE, f.OFFERING, f.SEED, f.BUILDING])!,
+        memberId: anon ? null : p.id,
+        anonymous: anon,
+        amountKobo: amount,
+        feeKobo: Math.min(Math.round(amount * 0.015) + (amount >= 250000 ? 10000 : 0), 200000),
+        channel: "online",
+        gatewayChannel: pick(["card", "bank_transfer", "ussd"]),
+        source: "online",
+        status: "confirmed",
+        givenOn: new Date(today.getTime() - d * 86400000).toISOString().slice(0, 10),
+        reference: `BMC-SEED${String(++n).padStart(4, "0")}`,
+        confirmedAt: new Date(),
+      });
+    }
+    await updateGivingSettings(tx, owner, { receiptsForOffline: true });
+  });
 }
 
 main()

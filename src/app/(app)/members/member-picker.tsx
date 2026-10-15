@@ -2,6 +2,7 @@
 import { useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
+import type { ActionResult } from "@/server/action";
 import { findMembersAction } from "./actions";
 
 export type Picked = { id: string; name: string; memberNo: string; inHousehold: boolean };
@@ -12,11 +13,14 @@ export function MemberPicker({
   exclude = [],
   placeholder = "Search by name, phone or member number",
   autoFocus,
+  search: searchFn = findMembersAction,
 }: {
   onPick: (m: Picked) => void;
   exclude?: string[];
   placeholder?: string;
   autoFocus?: boolean;
+  /** Defaults to the members search; other modules pass a search their roles are allowed to use. */
+  search?: (input: { q: string }) => Promise<ActionResult<Picked[]>>;
 }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Picked[]>([]);
@@ -36,7 +40,7 @@ export function MemberPicker({
     t.current = setTimeout(async () => {
       const mine = ++seq.current;
       setLoading(true);
-      const r = await findMembersAction({ q: v });
+      const r = await searchFn({ q: v });
       if (mine !== seq.current) return; // a newer search has started
       setLoading(false);
       setResults(r.ok ? r.data : []);
