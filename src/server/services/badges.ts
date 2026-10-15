@@ -47,6 +47,11 @@ export async function navBadges(ctx: Ctx): Promise<Badges> {
         );
       if (waiting && Number(waiting.n) > 0) out["/expenses"] = { count: Number(waiting.n), tone: "accent" };
     }
+    if (ctx.can("memo.approve") || ctx.can("memo.disburse")) {
+      const { memoCounts } = await import("./memos");
+      const c = await memoCounts(tx, ctx);
+      if (c.action + c.pay > 0) out["/memos"] = { count: c.action + c.pay, tone: "accent" };
+    }
     return out;
   });
 }

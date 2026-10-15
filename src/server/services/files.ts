@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import type { Tx } from "../db";
 import { assets, expenses, files } from "../db/schema";
+import { memoVisibleTo } from "./memo-access";
 import type { Actor } from "../auth/context";
 import { assertCan } from "../auth/context";
 import type { Permission } from "../auth/permissions";
@@ -23,6 +24,15 @@ const ENTITIES = {
       return r ? { branchId: r.branchId, locked: r.status === "void" } : null;
     },
   },
+  memo: {
+    read: "memo.create",
+    write: "memo.create",
+    label: "memo",
+    find: async (tx: Tx, id: string, ctx: Actor) => {
+      const m = await memoVisibleTo(tx, ctx, id);
+      return m ? { branchId: m.branchId, locked: ["approved", "declined", "withdrawn"].includes(m.status) } : null;
+    },
+  },
   asset: {
     read: "finance.expenses",
     write: "finance.expenses",
@@ -38,7 +48,7 @@ const ENTITIES = {
     read: Permission;
     write: Permission;
     label: string;
-    find: (tx: Tx, id: string) => Promise<{ branchId: string; locked: boolean } | null>;
+    find: (tx: Tx, id: string, ctx: Actor) => Promise<{ branchId: string; locked: boolean } | null>;
   }
 >;
 export type FileEntity = keyof typeof ENTITIES;
@@ -57,7 +67,7 @@ export function sniffType(b: Uint8Array): { mime: string; ext: string } | null {
 
 async function entityInReach(tx: Tx, ctx: Actor, entityType: FileEntity, entityId: string) {
   const e = ENTITIES[entityType];
-  const r = await e.find(tx, entityId);
+  const r = await e.find(tx, entityId, ctx);
   if (!r) throw notFound(`That ${e.label}`);
   assertBranch(ctx, r.branchId);
   return r;

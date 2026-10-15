@@ -5,6 +5,7 @@ import { createDefaultFunds } from "./giving";
 import { createDefaultCategories } from "./expenses";
 import { grantWelcomeUnits, STARTER_TEMPLATES } from "./messaging";
 import { createDefaultScheduleTemplates } from "./schedules";
+import { createMemoDefaults } from "./memos";
 import { messageTemplates } from "../db/schema";
 import { DEFAULT_ROLES } from "../auth/permissions";
 import { hashPassword, passwordProblem, verifyPassword } from "../auth/password";
@@ -100,6 +101,7 @@ export async function signUp(input: SignUpInput) {
     await createDefaultCategories(tx, org!.id);
     await grantWelcomeUnits(tx, org!.id);
     await createDefaultScheduleTemplates(tx, org!.id);
+    await createMemoDefaults(tx, org!.id);
     await tx.insert(messageTemplates).values(STARTER_TEMPLATES.map((t) => ({ ...t, orgId: org!.id })));
     await audit(
       tx,

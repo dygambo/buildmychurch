@@ -26,6 +26,9 @@ import {
   verifyBatch,
 } from "@/server/services/giving";
 import { givingTransactions, jobs, members, messageCampaigns, messages, scheduleVersions, smsLedger } from "@/server/db/schema";
+import { approveMemo, memoSchema, queryMemo, saveMemo, saveRoute as saveMemoRoute, submitMemo } from "@/server/services/memos";
+import { randomUUID } from "node:crypto";
+import { groups } from "@/server/db/schema";
 import {
   completePastSchedules,
   generateVersionPdf,
@@ -446,6 +449,7 @@ async function main() {
   await seedGiving(r.orgId, row!.u.id);
   await seedMessaging(r.orgId, row!.u.id);
   await seedSchedules(r.orgId, row!.u.id);
+  await seedMemos(r.orgId, row!.u.id);
   console.log(`Demo church created with 120 members.\nSign in with ${DEMO.email} / ${DEMO.password}`);
 }
 
@@ -882,6 +886,70 @@ async function seedSchedules(orgId: string, ownerId: string) {
   await completePastSchedules(orgId);
   for (const v of versionIds) await generateVersionPdf(orgId, v.id, { final: true });
   await db.delete(jobs).where(inArray(jobs.type, ["schedule.pdf", "schedule.notify"]));
+}
+
+/** A church secretary, an approval route, and memos at different stages. */
+async function seedMemos(orgId: string, ownerId: string) {
+  const [adminRole] = await db.select({ id: roles.id }).from(roles).where(and(eq(roles.orgId, orgId), eq(roles.key, "admin")));
+  const [sec] = await db
+    .insert(users)
+    .values({ email: "secretary@graceassembly.ng", name: "Sis. Kemi Balogun", passwordHash: await hashPassword(DEMO.password) })
+    .returning({ id: users.id });
+  await db.insert(memberships).values({ orgId, userId: sec!.id, roleId: adminRole!.id, title: "Church Secretary" });
+  const [fin] = await db.select({ id: users.id }).from(users).where(eq(users.email, "finance@graceassembly.ng"));
+  const owner = await actorFor(ownerId, orgId);
+  const secretary = await actorFor(sec!.id, orgId);
+  const finance = await actorFor(fin!.id, orgId);
+  await withOrg(orgId, async (tx) => {
+    await saveMemoRoute(tx, owner, {
+      prefix: "GAL",
+      steps: [
+        { label: "Church Secretary", roleKey: "admin", minAmount: 0 },
+        { label: "Senior Pastor", roleKey: "owner", minAmount: 5_000_000 },
+      ],
+    });
+    const [hq] = await tx.select().from(branches).orderBy(asc(branches.createdAt)).limit(1);
+    const [welfare] = await tx.select().from(groups).where(eq(groups.name, "Ushering"));
+    const [someone] = await tx.select({ id: members.id }).from(members).where(eq(members.stage, "member")).limit(1);
+    const m1 = randomUUID();
+    await saveMemo(tx, finance, memoSchema.parse({
+      id: m1,
+      branchId: hq!.id,
+      category: "welfare",
+      title: "Welfare support for a member after surgery",
+      body: "Member in need: see the linked record.\n\nTheir situation: surgery at LUTH last week; the family has paid half of the bill.\n\nSupport requested: N150,000 towards the balance.\n\nHas the church helped them before? No.",
+      amount: "150000",
+      memberId: someone!.id,
+      confidential: true,
+    }));
+    await submitMemo(tx, finance, m1);
+    await approveMemo(tx, secretary, { id: m1, comment: "Confirmed with the hospital's billing office." });
+    await approveMemo(tx, owner, { id: m1, comment: "Approved. Let the family know we're praying with them." });
+
+    const m2 = randomUUID();
+    await saveMemo(tx, secretary, memoSchema.parse({
+      id: m2,
+      branchId: hq!.id,
+      category: "maintenance",
+      title: "Repair: auditorium air conditioners before Harvest",
+      body: "What needs fixing: two of the four 10HP units are blowing warm air.\n\nHow urgent: Harvest Thanksgiving is on Sunday and we expect 1,500 people.\n\nQuotes received:\n1. CoolTech Services: N320,000\n2. Arctic Air: N365,000\n3. Frosty Engineering: N410,000\n\nRecommended vendor: CoolTech, who serviced the units last quarter.",
+      amount: "320000",
+      departmentId: welfare?.id ?? null,
+      urgent: true,
+    }));
+    await submitMemo(tx, secretary, m2);
+
+    const m3 = randomUUID();
+    await saveMemo(tx, finance, memoSchema.parse({
+      id: m3,
+      branchId: hq!.id,
+      category: "guest",
+      title: "Invitation of guest minister: Rev. Dr. Femi Aluko",
+      body: "Name and ministry: Rev. Dr. Femi Aluko, Living Springs Ministries, Ibadan.\n\nProposed date: Youth Sunday, last Sunday of November.\n\nHonorarium and travel: to be agreed.",
+    }));
+    await submitMemo(tx, finance, m3);
+    await queryMemo(tx, secretary, { id: m3, comment: "Please confirm the honorarium and whether he needs accommodation." });
+  });
 }
 
 main()

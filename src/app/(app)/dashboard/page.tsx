@@ -11,7 +11,9 @@ import { attendanceTrend } from "@/server/services/attendance";
 import { followupCounts } from "@/server/services/followup";
 import { childStats } from "@/server/services/children";
 import { givingSettings, givingSummary } from "@/server/services/giving";
-import { naira } from "@/lib/format";
+import { formatDate, naira } from "@/lib/format";
+import { memoCounts } from "@/server/services/memos";
+import { upcomingSchedules } from "@/server/services/schedules";
 import { Stat } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { Donut, MonthlyBars } from "@/components/charts";
@@ -41,7 +43,9 @@ export default async function DashboardPage() {
     const kids = ctx.can("children.checkin") || ctx.can("children.manage") ? await childStats(tx, ctx) : null;
     const giving = ctx.can("giving.read") ? await givingSummary(tx, ctx) : null;
     const gs = await givingSettings(tx, ctx.org.id);
-    return { branches: b!.n, team: t!.n, people, groups, anyMembers: (people?.total ?? 0) > 0, trend, fu, kids, giving, gs };
+    const memo = ctx.can("memo.approve") || ctx.can("memo.disburse") ? await memoCounts(tx, ctx) : null;
+    const nextService = ctx.can("schedules.read") ? ((await upcomingSchedules(tx, ctx, 1))[0] ?? null) : null;
+    return { branches: b!.n, team: t!.n, people, groups, anyMembers: (people?.total ?? 0) > 0, trend, fu, kids, giving, gs, memo, nextService };
   });
   const steps = [
     {
@@ -64,7 +68,7 @@ export default async function DashboardPage() {
   return (
     <>
       <PageHeader title={`${greeting()}, ${first}`} description={`Here is how ${ctx.org.name} is doing.`} />
-      {(stats.trend || stats.fu || stats.kids || stats.giving) && (
+      {(stats.trend || stats.fu || stats.kids || stats.giving || stats.memo || stats.nextService) && (
         <div className="grid grid-cols-4 gap-3 max-lg:grid-cols-2">
           {stats.giving && (
             <Stat
@@ -78,6 +82,30 @@ export default async function DashboardPage() {
                     Open giving
                   </Link>
                 )
+              }
+            />
+          )}
+          {stats.memo && (
+            <Stat
+              label="Memos waiting for you"
+              value={(stats.memo.action + stats.memo.pay).toLocaleString("en-NG")}
+              tone={stats.memo.action + stats.memo.pay > 0 ? "bad" : undefined}
+              sub={
+                <Link href="/memos" className="text-accent">
+                  {stats.memo.pay ? `${stats.memo.pay} cleared for payment` : "Open E-Memo"}
+                </Link>
+              }
+            />
+          )}
+          {stats.nextService && (
+            <Stat
+              label="Next service"
+              value={formatDate(stats.nextService.serviceDate, "week")}
+              sub={
+                <Link href={`/schedules/${stats.nextService.id}`} className="text-accent">
+                  {stats.nextService.title}
+                  {stats.nextService.currentVersion === 0 ? " (draft)" : ""}
+                </Link>
               }
             />
           )}

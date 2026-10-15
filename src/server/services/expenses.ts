@@ -61,6 +61,9 @@ const optUuid = z
   .transform((v) => v || null);
 const isoDate = (msg: string) => z.string().regex(/^\d{4}-\d{2}-\d{2}$/, msg);
 
+/** The next expense number for the year (E-2026-0001). */
+export const nextExpenseNo = (tx: Tx, orgId: string, year: number) => nextNo(tx, orgId, "expense", year);
+
 async function nextNo(tx: Tx, orgId: string, kind: "expense" | "asset", year: number) {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`finance_no:${kind}:${orgId}`}))`);
   const prefix = kind === "expense" ? `E-${year}-` : "A-";
