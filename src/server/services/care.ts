@@ -164,7 +164,7 @@ async function insertPrayer(
 }
 
 /** Tell the care team a request came in. Confidential text never goes into an email. */
-async function notifyTeam(tx: Tx, orgId: string, id: string, input: z.output<typeof prayerSchema>, name: string | null) {
+export async function notifyPrayerTeam(tx: Tx, orgId: string, id: string, input: z.output<typeof prayerSchema>, name: string | null) {
   const [o] = await tx.select({ name: organisations.name }).from(organisations).where(eq(organisations.id, orgId));
   const team = await careTeam(tx, orgId);
   const url = `${env().APP_URL}/care?open=${id}`;
@@ -232,7 +232,7 @@ export async function submitPublicPrayer(token: string, input: z.output<typeof p
     const full = { ...input, memberId: null, branchId: null };
     const id = await insertPrayer(tx, org.id, full, "online", "Prayer page");
     await audit(tx, { system: "Prayer page", orgId: org.id }, { action: "prayer.received", summary: "Received a prayer request from the prayer page", entityType: "prayer", entityId: id });
-    await notifyTeam(tx, org.id, id, full, input.name);
+    await notifyPrayerTeam(tx, org.id, id, full, input.name);
     if (input.email)
       await enqueue(
         tx,

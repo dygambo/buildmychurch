@@ -7,3 +7,4 @@ export * from "./schedules";
 export * from "./memos";
 export * from "./events";
 export * from "./care";
+export * from "./portal";
