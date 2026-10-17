@@ -3,12 +3,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { portalChurch, portalMember } from "@/server/services/portal";
 import { PortalNav } from "./nav";
+import { ChurchBranding } from "@/components/brand-style";
+import { brandUrl, getBrand } from "@/server/services/brand";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const c = await portalChurch((await params).slug);
-  return { title: c ? `${c.name} · Member page` : "Member page", robots: { index: false } };
+  const icon = c ? brandUrl(c.id, "favicon", await getBrand(c.id)) : null;
+  return { title: c ? `${c.name} · Member page` : "Member page", robots: { index: false }, ...(icon ? { icons: { icon } } : {}) };
 }
 
 export default async function PortalLayout({ children, params }: { children: React.ReactNode; params: Promise<{ slug: string }> }) {
@@ -20,6 +23,7 @@ export default async function PortalLayout({ children, params }: { children: Rea
     <div className="min-h-dvh bg-bg">
       <header className="sticky top-0 z-10 border-b border-line bg-surface/95 backdrop-blur">
         <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-3">
+          <ChurchBranding orgId={church.id} logo className="size-9 shrink-0 rounded-lg object-contain" />
           <Link href={`/m/${slug}`} className="min-w-0 flex-1">
             <div className="truncate text-[15px] font-semibold">{church.name}</div>
             <div className="text-xs text-muted">{me ? `${me.firstName} ${me.lastName} · ${me.memberNo}` : "Member page"}</div>

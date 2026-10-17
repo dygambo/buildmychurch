@@ -28,6 +28,7 @@ import { audit } from "../audit";
 import { decrypt, encrypt, safeEqual } from "../crypto";
 import { AppError, notFound } from "../errors";
 import { enqueue } from "../jobs/queue";
+import { brandEmail } from "./brand";
 import { emailLayout, esc } from "../emails/layout";
 import { env } from "../env";
 import { sendEmail } from "../providers/email";
@@ -444,12 +445,12 @@ export async function prepareCampaign(orgId: string, campaignId: string) {
               {
                 to: u.email,
                 subject: `Not sent: ${c.name}`,
-                html: emailLayout({
+                html: await brandEmail(orgId, emailLayout({
                   church,
                   heading: "Your SMS wasn't sent",
                   bodyHtml: textToHtml(reason),
                   button: { label: "Buy SMS units", url: `${env().APP_URL}/messages/wallet` },
-                }),
+                })),
               },
               { orgId, dedupeKey: `campaign-failed:${c.id}` },
             );
@@ -513,7 +514,7 @@ export async function deliverMessages(orgId: string, ids: string[]) {
           to,
           subject: claimed.subject ?? o!.name,
           replyTo: o!.email ?? undefined,
-          html: emailLayout({
+          html: await brandEmail(orgId, emailLayout({
             church: o!.name,
             preheader: claimed.body.slice(0, 120),
             heading: claimed.subject ?? o!.name,
@@ -523,7 +524,7 @@ export async function deliverMessages(orgId: string, ids: string[]) {
                 ? `<p style="margin:20px 0 0;font-size:12px;color:#8792aa">Don't want these messages? <a href="${esc(unsub)}" style="color:#8792aa">Unsubscribe</a>.</p>`
                 : ""),
             footer: `${o!.name}${o!.address ? ` · ${o!.address}` : ""}`,
-          }),
+          })),
           text: claimed.body + (unsub ? `\n\nUnsubscribe: ${unsub}` : ""),
         });
         out = { provider: env().EMAIL_PROVIDER, providerId: r.providerId };

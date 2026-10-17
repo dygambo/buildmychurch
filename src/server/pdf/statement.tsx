@@ -1,4 +1,4 @@
-import { Document, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { Document, Image, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import { formatDate } from "@/lib/format";
 import type { memberGiving } from "../services/giving";
 
@@ -33,18 +33,23 @@ const CH: Record<string, string> = { cash: "Cash", pos: "POS", transfer: "Transf
 type G = Awaited<ReturnType<typeof memberGiving>>;
 
 /** The annual giving statement, for staff downloads and the member page. */
-export async function renderStatement({ o, name, memberNo, g }: { o: { name: string; address: string | null; phone: string | null; email: string | null }; name: string; memberNo: string; g: G }) {
+export async function renderStatement({ o, name, memberNo, g, logo, accent }: { o: { name: string; address: string | null; phone: string | null; email: string | null }; name: string; memberNo: string; g: G; logo?: Buffer | null; accent?: string }) {
+  const color = accent ?? "#2357e8";
   const year = g.year;
   const m = { memberNo };
   const generated = formatDate(new Date(), "long");
   const doc = (
     <Document title={`${year} giving statement - ${name}`} author={o.name} creator="Build My Church">
       <Page size="A4" style={s.page}>
-        <View style={s.head} fixed>
-          <View>
+        <View style={[s.head, { borderBottomColor: color }]} fixed>
+          <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
+            {/* eslint-disable-next-line jsx-a11y/alt-text */}
+            {logo ? <Image style={{ width: 38, height: 38, objectFit: "contain" }} src={logo} /> : null}
+            <View>
             <Text style={s.church}>{o.name}</Text>
             {o.address && <Text style={s.muted}>{o.address}</Text>}
             <Text style={s.muted}>{[o.phone?.replace("+234", "0"), o.email].filter(Boolean).join("  |  ")}</Text>
+            </View>
           </View>
           <Text style={[s.muted, { textAlign: "right" }]}>GIVING STATEMENT{"\n"}{year}</Text>
         </View>
@@ -67,7 +72,7 @@ export async function renderStatement({ o, name, memberNo, g }: { o: { name: str
             <Text style={s.bold}>{money(g.total)}</Text>
           </View>
         </View>
-        <View style={s.th} fixed>
+        <View style={[s.th, { backgroundColor: color }]} fixed>
           <Text style={s.c1}>Date</Text>
           <Text style={s.c2}>Fund</Text>
           <Text style={s.c3}>Method</Text>

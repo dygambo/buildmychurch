@@ -30,6 +30,7 @@ import { audit } from "../audit";
 import { decrypt, randomToken } from "../crypto";
 import { AppError, notFound } from "../errors";
 import { enqueue } from "../jobs/queue";
+import { brandEmail, brandForPdf } from "./brand";
 import { emailLayout, esc, p } from "../emails/layout";
 import { env } from "../env";
 import { PermanentSendError, TransientSendError, sendEmail } from "../providers/email";
@@ -726,17 +727,6 @@ export async function publishSchedule(tx: Tx, ctx: Actor, input: z.output<typeof
 const renderSchedulePdf = async (...a: Parameters<typeof import("../pdf/schedule").renderSchedulePdf>) =>
   (await import("../pdf/schedule")).renderSchedulePdf(...a);
 
-async function churchLogo(tx: Tx, orgId: string) {
-  const [o] = await tx.select({ logoFileId: organisations.logoFileId }).from(organisations).where(eq(organisations.id, orgId));
-  if (!o?.logoFileId) return null;
-  const [f] = await tx.select().from(files).where(eq(files.id, o.logoFileId));
-  if (!f || !/^image\/(png|jpeg)$/.test(f.mime)) return null;
-  try {
-    return await getObject(f.storageKey);
-  } catch {
-    return null;
-  }
-}
 
 /** Renders the PDF for a published version, stores it, and then lets the notifications go. */
 export async function generateVersionPdf(orgId: string, versionId: string, opts: { final?: boolean; notify?: boolean } = {}) {
@@ -748,7 +738,7 @@ export async function generateVersionPdf(orgId: string, versionId: string, opts:
       const buf = await renderSchedulePdf({
         snap: v.snapshot,
         church: o!.name,
-        logo: await churchLogo(tx, orgId),
+        ...(await brandForPdf(tx, orgId)),
         version: v.version,
         publishedAt: v.publishedAt,
         publishedBy: v.publishedByName,
@@ -789,7 +779,7 @@ export async function previewPdf(tx: Tx, ctx: Actor, id: string) {
   const snap = await snapshotOf(tx, id);
   return {
     name: `${s.title} - preview.pdf`,
-    bytes: await renderSchedulePdf({ snap, church: ctx.org.name, logo: await churchLogo(tx, ctx.org.id), version: null, typeLabel: typeLabelOf(snap) }),
+    bytes: await renderSchedulePdf({ snap, church: ctx.org.name, ...(await brandForPdf(tx, ctx.org.id)), version: null, typeLabel: typeLabelOf(snap) }),
   };
 }
 
@@ -900,7 +890,7 @@ export async function sendScheduleNotifications(orgId: string, scheduleId: strin
         const r = await sendEmail({
           to: contact.email,
           subject: `${n.reason === "removed" ? "Change" : n.reason === "changed" ? "Updated" : "Your part"}: ${snap.title}, ${formatDate(snap.serviceDate)}`,
-          html: emailLayout({
+          html: await brandEmail(orgId, emailLayout({
             church: o.name,
             preheader: n.detail ?? snap.title,
             heading: REASON_HEADING[n.reason],
@@ -912,7 +902,7 @@ export async function sendScheduleNotifications(orgId: string, scheduleId: strin
               (pdf && n.reason !== "removed" ? p("The full order of service is attached as a PDF.") : ""),
             button: n.reason === "removed" ? undefined : { label: "View the full schedule", url: link },
             footer: `${o.name} · Sent because you're named on this service schedule.`,
-          }),
+          })),
           attachments: pdf && n.reason !== "removed" ? [{ filename: pdf.name, content: pdf.bytes, contentType: "application/pdf" }] : undefined,
         });
         await withOrg(orgId, (tx) =>

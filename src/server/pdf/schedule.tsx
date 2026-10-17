@@ -13,13 +13,12 @@ const safe = (s: string | null | undefined) =>
     .replace(/…/g, "...")
     .replace(/[^\x09\x0a\x0d\x20-\x7e\xa0-\xff]/g, "");
 
-const BLUE = "#2357e8";
 const INK = "#0e1a33";
 const MUTED = "#56637e";
 const LINE = "#e2e7f0";
 
 // Note: no lineHeight on the page itself; with it, react-pdf drops the fixed footer.
-const s = StyleSheet.create({
+const makeStyles = (BLUE: string) => StyleSheet.create({
   page: { paddingTop: 36, paddingHorizontal: 40, paddingBottom: 60, fontSize: 9.5, fontFamily: "Helvetica", color: INK },
   head: { flexDirection: "row", alignItems: "center", gap: 10, borderBottom: `2pt solid ${BLUE}`, paddingBottom: 10 },
   logo: { width: 34, height: 34, objectFit: "contain" },
@@ -42,16 +41,20 @@ const s = StyleSheet.create({
   foot: { position: "absolute", bottom: 26, left: 40, right: 40, flexDirection: "row", justifyContent: "space-between", fontSize: 7.5, color: "#8792aa", borderTop: `0.5pt solid ${LINE}`, paddingTop: 6 },
   stamp: { position: "absolute", top: 36, right: 40, fontSize: 8, color: "#b45309", border: "1pt solid #b45309", paddingVertical: 2, paddingHorizontal: 6, borderRadius: 3 },
 });
+const defaultStyles = makeStyles("#2357e8");
 
 export async function renderSchedulePdf(o: {
   snap: ScheduleSnapshot;
   church: string;
   logo?: Buffer | null;
+  /** The church colour; defaults to Build My Church blue. */
+  accent?: string;
   version: number | null;
   publishedAt?: Date | null;
   publishedBy?: string | null;
   typeLabel: string;
 }) {
+  const s = o.accent ? makeStyles(o.accent) : defaultStyles;
   const { snap } = o;
   const clock = itemClock(snap.startTime, snap.items);
   const when = `${formatDate(snap.serviceDate, "long")}, ${to12(snap.startTime)}${snap.endTime ? ` - ${to12(snap.endTime)}` : ""}`;

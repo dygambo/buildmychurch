@@ -8,7 +8,8 @@ import { changePassword, updateProfile } from "@/server/services/account";
 import { addTeamMember, addTeamSchema, removeTeamMember, removeTeamSchema, resetTeamPassword, setTeamStatus, teamCandidate } from "@/server/services/team";
 import { disableMfa, enableMfa } from "@/server/services/accounts";
 import { verifyPassword } from "@/server/auth/password";
-import { db } from "@/server/db";
+import { db, withOrg } from "@/server/db";
+import { removeBrandImage, setAccent, uploadBrandImage } from "@/server/services/brand";
 import { users } from "@/server/db/schema";
 import { eq } from "drizzle-orm";
 import { AppError } from "@/server/errors";
@@ -192,3 +193,39 @@ export const removeTeamMemberAction = orgAction({ perm: "users.manage", schema: 
   revalidatePath("/members");
   return { data: r, message: `${r.name} was removed from the team${r.removedMember ? " and the members directory" : ". Their member record is unchanged"}.` };
 });
+
+/* ---------- branding ---------- */
+
+export async function uploadBrandAction(form: FormData): Promise<ActionResult<null>> {
+  const ctx = await getCtx();
+  if (!ctx) return { ok: false, error: "Your session has ended. Sign in again to continue." };
+  if (!ctx.can("settings.manage")) return { ok: false, error: "Your role doesn't allow this. Ask a Super Admin if you need access." };
+  const kind = form.get("kind");
+  const file = form.get("file");
+  if ((kind !== "logo" && kind !== "favicon") || !(file instanceof File)) return { ok: false, error: "Choose an image to upload." };
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    await withOrg(ctx.org.id, (tx) => uploadBrandImage(tx, ctx, { kind, name: file.name, bytes }));
+    revalidatePath("/", "layout");
+    return { ok: true, data: null, message: kind === "logo" ? "Logo saved. It now appears on emails and PDFs." : "Browser icon saved" };
+  } catch (e) {
+    if (e instanceof AppError) return { ok: false, error: e.message };
+    console.error("[brand]", e);
+    return { ok: false, error: "Something went wrong on our side, and nothing was saved. Try again in a moment." };
+  }
+}
+
+export const removeBrandAction = orgAction({ perm: "settings.manage", schema: z.object({ kind: z.enum(["logo", "favicon"]) }) }, async ({ kind }, ctx, tx) => {
+  await removeBrandImage(tx, ctx, kind);
+  revalidatePath("/", "layout");
+  return { data: null, message: kind === "logo" ? "Logo removed" : "Browser icon removed" };
+});
+
+export const setAccentAction = orgAction(
+  { perm: "settings.manage", schema: z.object({ accent: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Choose a colour.").nullable() }) },
+  async ({ accent }, ctx, tx) => {
+    await setAccent(tx, ctx, accent);
+    revalidatePath("/", "layout");
+    return { data: null, message: accent ? "App colour saved for everyone in your church" : "Back to the default colour" };
+  },
+);

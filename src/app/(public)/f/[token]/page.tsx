@@ -1,3 +1,4 @@
+import { ChurchBranding } from "@/components/brand-style";
 import type { Metadata } from "next";
 import { Card, CardBody } from "@/components/ui/card";
 import { publicForm } from "@/server/services/forms";
@@ -22,6 +23,7 @@ export default async function FormPage({ params }: { params: Promise<{ token: st
   return (
     <div className="flex w-full max-w-lg flex-col gap-4">
       <div className="text-center">
+        <ChurchBranding orgId={f.orgId} logo className="mx-auto mb-2 h-12 w-auto max-w-[180px] object-contain" />
         <div className="text-[13px] font-medium text-accent">{f.church}</div>
         <h1 className="mt-1 text-2xl font-semibold text-balance">{f.form.title}</h1>
         {f.form.description && <p className="mt-1.5 text-[13px] whitespace-pre-wrap text-muted">{f.form.description}</p>}

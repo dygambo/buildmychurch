@@ -1,3 +1,4 @@
+import { ChurchBranding } from "@/components/brand-style";
 import type { Metadata } from "next";
 import { eq } from "drizzle-orm";
 import { db, withOrg } from "@/server/db";
@@ -43,7 +44,8 @@ export default async function GivePage({
   return (
     <div className="flex w-full max-w-md flex-col gap-5">
       <div className="flex flex-col items-center gap-3 text-center">
-        <Logo className="size-10" />
+        {page ? <ChurchBranding orgId={page.org.id} logo className="h-12 w-auto max-w-[180px] object-contain" /> : null}
+        {!page && <Logo className="size-10" />}
         {page ? (
           <>
             <h1 className="text-xl font-semibold">Give to {page.org.name}</h1>

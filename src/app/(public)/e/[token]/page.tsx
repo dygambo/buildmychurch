@@ -1,3 +1,4 @@
+import { ChurchBranding } from "@/components/brand-style";
 import type { Metadata } from "next";
 import { CalendarDays, MapPin } from "lucide-react";
 import { Card, CardBody, Note } from "@/components/ui/card";
@@ -24,6 +25,7 @@ export default async function PublicEventPage({ params }: { params: Promise<{ to
   return (
     <div className="flex w-full max-w-lg flex-col gap-4">
       <div className="text-center">
+        <ChurchBranding orgId={e.orgId} logo className="mx-auto mb-2 h-12 w-auto max-w-[180px] object-contain" />
         <div className="text-[13px] font-medium text-accent">{e.church}</div>
         <h1 className="mt-1 text-2xl font-semibold text-balance">{e.event.title}</h1>
         <div className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 text-[13px] text-muted">

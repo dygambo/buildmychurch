@@ -1,4 +1,5 @@
-import { Document, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { Document, Image, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { brandForPdf } from "@/server/services/brand";
 import { getCtx } from "@/server/auth/context";
 import { withOrg } from "@/server/db";
 import { audit } from "@/server/audit";
@@ -43,15 +44,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const m = await withOrg(ctx.org.id, async (tx) => {
       const memo = await getMemo(tx, ctx, id);
       await audit(tx, ctx, { action: "memo.downloaded", summary: `Downloaded memo ${memo.refNo ?? memo.title} as PDF`, entityType: "memo", entityId: id });
-      return memo;
-    });
+      return { memo, brand: await brandForPdf(tx, ctx.org.id) };
+    }).then((r) => Object.assign(r.memo, { brand: r.brand }));
     const doc = (
       <Document title={safe(m.refNo ?? m.title)} author={safe(ctx.org.name)} creator="Build My Church">
         <Page size="A4" style={s.page}>
-          <View style={s.head}>
+          <View style={[s.head, { borderBottomColor: m.brand.accent }]}>
+            <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
+            {/* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf images have no alt */}
+            {m.brand.logo ? <Image style={{ width: 36, height: 36, objectFit: "contain" }} src={m.brand.logo} /> : null}
             <View>
-              <Text style={s.kicker}>INTERNAL MEMO{m.confidential ? " - CONFIDENTIAL" : ""}</Text>
+              <Text style={[s.kicker, { color: m.brand.accent }]}>INTERNAL MEMO{m.confidential ? " - CONFIDENTIAL" : ""}</Text>
               <Text style={s.church}>{safe(ctx.org.name)}</Text>
+            </View>
             </View>
             <Text style={s.ref}>{safe(m.refNo ?? "DRAFT")}</Text>
           </View>
