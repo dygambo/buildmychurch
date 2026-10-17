@@ -61,7 +61,7 @@ test("one person counts a collection and a second person verifies it", async ({ 
 
   // invite a finance officer, who verifies
   await page.goto("/settings/team");
-  await page.getByRole("button", { name: "Invite someone" }).click();
+  await page.getByRole("button", { name: "Invite by email" }).click();
   await page.getByLabel("Full name").fill("Tola Treasurer");
   await page.getByLabel("Email").fill(finance);
   await page.getByLabel("Role").selectOption({ label: "Finance Officer" });

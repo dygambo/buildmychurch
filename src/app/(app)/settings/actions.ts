@@ -5,6 +5,7 @@ import { orgAction, type ActionResult } from "@/server/action";
 import { getCtx } from "@/server/auth/context";
 import { inviteStaff, revokeInvite, saveRole, updateMembership, updateOrg } from "@/server/services/org";
 import { changePassword, updateProfile } from "@/server/services/account";
+import { addTeamMember, addTeamSchema, removeTeamMember, removeTeamSchema, resetTeamPassword, setTeamStatus, teamCandidate } from "@/server/services/team";
 import { disableMfa, enableMfa } from "@/server/services/accounts";
 import { verifyPassword } from "@/server/auth/password";
 import { db } from "@/server/db";
@@ -149,3 +150,45 @@ export async function disableMfaAction(input: { password: string }) {
     return { ok: true, data: null, message: "Two-step verification is off" };
   });
 }
+
+/* ---------- team accounts from the members directory ---------- */
+
+const membershipIdSchema = z.object({ membershipId: z.string().uuid() });
+
+export const teamCandidateAction = orgAction({ perm: "users.manage", schema: z.object({ memberId: z.string().uuid() }) }, async ({ memberId }, ctx, tx) => {
+  return { data: await teamCandidate(tx, ctx, memberId) };
+});
+
+export const addTeamMemberAction = orgAction({ perm: "users.manage", schema: addTeamSchema }, async (input, ctx, tx) => {
+  const r = await addTeamMember(tx, ctx, input);
+  revalidatePath("/settings/team");
+  return {
+    data: r,
+    message: r.newAccount ? `${r.name} is on the team. Their sign-in details are on the way to ${input.email}.` : `${r.name} is on the team. They can sign in with their existing password.`,
+  };
+});
+
+export const resetTeamPasswordAction = orgAction({ perm: "users.manage", schema: membershipIdSchema }, async ({ membershipId }, ctx, tx) => {
+  const r = await resetTeamPassword(tx, ctx, membershipId);
+  revalidatePath("/settings/team");
+  return {
+    data: r,
+    message: r.mode === "temporary" ? `New temporary password emailed to ${r.email}. They've been signed out.` : `They also work with another church, so we emailed ${r.email} a link to choose a new password.`,
+  };
+});
+
+export const setTeamStatusAction = orgAction(
+  { perm: "users.manage", schema: membershipIdSchema.extend({ status: z.enum(["active", "disabled"]) }) },
+  async (input, ctx, tx) => {
+    await setTeamStatus(tx, ctx, input);
+    revalidatePath("/settings/team");
+    return { data: null, message: input.status === "disabled" ? "Access suspended" : "Access restored" };
+  },
+);
+
+export const removeTeamMemberAction = orgAction({ perm: "users.manage", schema: removeTeamSchema }, async (input, ctx, tx) => {
+  const r = await removeTeamMember(tx, ctx, input);
+  revalidatePath("/settings/team");
+  revalidatePath("/members");
+  return { data: r, message: `${r.name} was removed from the team${r.removedMember ? " and the members directory" : ". Their member record is unchanged"}.` };
+});

@@ -118,10 +118,11 @@ export async function signUp(input: SignUpInput) {
 }
 
 export type SignInResult =
-  | { status: "ok"; userId: string }
+  | { status: "ok"; userId: string; mustChange: boolean }
   | { status: "mfa"; userId: string }
   | { status: "invalid" }
-  | { status: "locked"; minutes: number };
+  | { status: "locked"; minutes: number }
+  | { status: "expired" };
 
 export async function checkCredentials(emailRaw: string, password: string): Promise<SignInResult> {
   const email = emailRaw.trim().toLowerCase();
@@ -144,8 +145,9 @@ export async function checkCredentials(emailRaw: string, password: string): Prom
       .where(eq(users.id, u.id));
     return failed >= LOCK_AFTER ? { status: "locked", minutes: LOCK_MINUTES } : { status: "invalid" };
   }
+  if (u.mustChangePassword && u.tempPasswordExpiresAt && u.tempPasswordExpiresAt.getTime() < Date.now()) return { status: "expired" };
   await db.update(users).set({ failedLogins: 0, lockedUntil: null, lastLoginAt: new Date() }).where(eq(users.id, u.id));
-  return u.mfaEnabled ? { status: "mfa", userId: u.id } : { status: "ok", userId: u.id };
+  return u.mfaEnabled ? { status: "mfa", userId: u.id } : { status: "ok", userId: u.id, mustChange: u.mustChangePassword };
 }
 
 /** Accepts an authenticator code or a one-time recovery code. */
@@ -226,7 +228,7 @@ export async function resetPassword(token: string, password: string) {
   if (problem) throw new AppError(problem, { password: problem });
   await db
     .update(users)
-    .set({ passwordHash: await hashPassword(password), failedLogins: 0, lockedUntil: null })
+    .set({ passwordHash: await hashPassword(password), failedLogins: 0, lockedUntil: null, mustChangePassword: false, tempPasswordExpiresAt: null })
     .where(eq(users.id, t.userId));
   await db.update(authTokens).set({ usedAt: new Date() }).where(eq(authTokens.id, t.id));
   return t.userId;
@@ -333,4 +335,14 @@ export async function acceptInvite(token: string, password: string, name?: strin
     );
   });
   return { userId: u!.id, orgId: inv.orgId };
+}
+
+/** First sign-in with a temporary password: the user picks their own. */
+export async function replaceTemporaryPassword(userId: string, next: string) {
+  const [u] = await db.select().from(users).where(eq(users.id, userId));
+  if (!u?.mustChangePassword) throw new AppError("Your password is already set. Go to your dashboard.");
+  if (await verifyPassword(u.passwordHash, next)) throw new AppError("Choose a new password, not the temporary one.", { password: "Use a different password." });
+  const problem = passwordProblem(next, { email: u.email });
+  if (problem) throw new AppError(problem, { password: problem });
+  await db.update(users).set({ passwordHash: await hashPassword(next), mustChangePassword: false, tempPasswordExpiresAt: null }).where(eq(users.id, userId));
 }

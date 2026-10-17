@@ -78,6 +78,10 @@ export const users = pgTable("users", {
   failedLogins: integer("failed_logins").notNull().default(0),
   lockedUntil: ts("locked_until"),
   lastLoginAt: ts("last_login_at"),
+  /** Set when an admin creates the account or resets the password: the user picks their own at next sign-in. */
+  mustChangePassword: boolean("must_change_password").notNull().default(false),
+  /** A temporary password stops working after this. */
+  tempPasswordExpiresAt: ts("temp_password_expires_at"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -119,6 +123,9 @@ export const memberships = pgTable(
       .default(sql`'{}'::uuid[]`),
     title: text("title"),
     staffId: text("staff_id"),
+    /** Their record in the members directory, when they were added from it. */
+    memberId: uuid("member_id"),
+    /** "disabled" is shown as Suspended: they keep their role but can't open this church. */
     status: text("status", { enum: ["active", "disabled"] })
       .notNull()
       .default("active"),

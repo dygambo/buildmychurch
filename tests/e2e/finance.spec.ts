@@ -36,7 +36,7 @@ test("an accountant raises an expense, the pastor approves it, and it's paid wit
   await expect(page).toHaveURL(/\/dashboard/);
 
   await page.goto("/settings/team");
-  await page.getByRole("button", { name: "Invite someone" }).click();
+  await page.getByRole("button", { name: "Invite by email" }).click();
   await page.getByLabel("Full name").fill("Kemi Accountant");
   await page.getByLabel("Email").fill(finance);
   await page.getByLabel("Role").selectOption({ label: "Finance Officer" });

@@ -29,7 +29,7 @@ test("a memo is raised, queried, answered, approved with a stamp, and paid", asy
 
   // a church administrator to approve
   await page.goto("/settings/team");
-  await page.getByRole("button", { name: "Invite someone" }).click();
+  await page.getByRole("button", { name: "Invite by email" }).click();
   await page.getByLabel("Full name").fill("Sis. Ronke Admin");
   await page.getByLabel("Email").fill(admin);
   await page.getByLabel("Role").selectOption({ label: "Church Administrator" });

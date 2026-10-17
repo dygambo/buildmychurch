@@ -172,6 +172,7 @@ export async function listTeam(tx: Tx, ctx: Actor) {
         phone: users.phone,
         mfaEnabled: users.mfaEnabled,
         lastLoginAt: users.lastLoginAt,
+        mustChangePassword: users.mustChangePassword,
       },
       r: { id: roles.id, name: roles.name, key: roles.key },
     })

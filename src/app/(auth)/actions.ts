@@ -3,16 +3,20 @@ import { clientIp } from "@/server/request";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/server/db";
+import { eq } from "drizzle-orm";
+import { memberships, organisations } from "@/server/db/schema";
 import { enqueue } from "@/server/jobs/queue";
 import {
   acceptInvite,
   checkCredentials,
   createPasswordReset,
+  replaceTemporaryPassword,
   resetPassword,
   signUp,
   verifySecondFactor,
 } from "@/server/services/accounts";
-import { createSession, destroyOtherSessions, destroySession, readSession, updateSession } from "@/server/auth/session";
+import { cookies } from "next/headers";
+import { createSession, destroyOtherSessions, destroySession, readSession, SESSION_COOKIE, updateSession } from "@/server/auth/session";
 import { rateLimit } from "@/server/rate-limit";
 import { AppError } from "@/server/errors";
 import { zodFieldErrors, type ActionResult } from "@/server/action";
@@ -49,8 +53,23 @@ export async function signInAction(input: z.input<typeof signInSchema>): Promise
       ok: false,
       error: `This account is locked after too many failed attempts. Try again in ${r.minutes} minute${r.minutes === 1 ? "" : "s"}, or reset your password.`,
     };
+  if (r.status === "expired")
+    return {
+      ok: false,
+      error: "Your temporary password has expired. Ask your church administrator to reset it, or use Forgot password.",
+    };
+  const access = await db
+    .select({ status: memberships.status, church: organisations.name })
+    .from(memberships)
+    .innerJoin(organisations, eq(organisations.id, memberships.orgId))
+    .where(eq(memberships.userId, r.userId));
+  if (access.length && !access.some((a) => a.status === "active"))
+    return {
+      ok: false,
+      error: `Your access to ${access[0]!.church} is paused. Contact the church office if you think this is a mistake.`,
+    };
   await createSession(r.userId, { mfaPending: r.status === "mfa" });
-  return { ok: true, data: { next: r.status === "mfa" ? "/sign-in/verify" : "/dashboard" } };
+  return { ok: true, data: { next: r.status === "mfa" ? "/sign-in/verify" : r.status === "ok" && r.mustChange ? "/change-password" : "/dashboard" } };
 }
 
 export async function verifyMfaAction(input: { code: string }): Promise<ActionResult<{ next: string }>> {
@@ -156,4 +175,18 @@ export async function acceptInviteAction(input: {
 export async function signOutAction() {
   await destroySession();
   redirect("/sign-in");
+}
+
+export async function changeTemporaryPasswordAction(input: { password: string; confirm: string }): Promise<ActionResult<{ next: string }>> {
+  const s = await readSession();
+  if (!s || s.mfaPending) return { ok: false, error: "Your session has ended. Sign in again." };
+  if (input.password !== input.confirm) return { ok: false, error: "The two passwords don't match.", fieldErrors: { confirm: "Type the same password again." } };
+  try {
+    await replaceTemporaryPassword(s.userId, String(input.password ?? ""));
+    await destroyOtherSessions(s.userId, (await cookies()).get(SESSION_COOKIE)?.value);
+    return { ok: true, data: { next: "/dashboard" }, message: "Password saved. Welcome!" };
+  } catch (e) {
+    if (e instanceof AppError) return { ok: false, error: e.message, fieldErrors: e.fieldErrors };
+    throw e;
+  }
 }
