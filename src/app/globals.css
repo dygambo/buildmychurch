@@ -126,6 +126,32 @@
   ::selection {
     background: var(--accent-soft);
   }
+  /* Native controls follow the theme and the church colour. The open list of a <select> is drawn by the
+     browser, and without these it stays white in dark mode while inheriting the light text colour. */
+  select option,
+  select optgroup {
+    background-color: var(--surface);
+    color: var(--fg);
+  }
+  select option:disabled {
+    color: var(--faint);
+  }
+  select option:checked {
+    background-color: var(--accent-soft);
+    color: var(--fg);
+  }
+  input[type="checkbox"],
+  input[type="radio"],
+  input[type="range"],
+  progress {
+    accent-color: var(--accent);
+  }
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="time"],
+  input[type="month"] {
+    color-scheme: inherit;
+  }
 }
 
 @utility tabular {

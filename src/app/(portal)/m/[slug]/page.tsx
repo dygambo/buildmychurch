@@ -49,7 +49,7 @@ export default async function PortalHome({ params }: { params: Promise<{ slug: s
                     {formatDate(s.date, "week")} · {s.serviceLabel}
                   </div>
                 </div>
-                <Link href={s.respondUrl} className={s.status === "assigned" ? "rounded-lg bg-accent px-2.5 py-1 text-xs font-medium text-white" : "text-xs text-muted"}>
+                <Link href={s.respondUrl} className={s.status === "assigned" ? "rounded-lg bg-accent px-2.5 py-1 text-xs font-medium text-accent-ink" : "text-xs text-muted"}>
                   {s.status === "assigned" ? "Confirm" : SLOT[s.status]}
                 </Link>
               </li>

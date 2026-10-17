@@ -19,7 +19,7 @@ export default async function TicketPage({ params }: { params: Promise<{ token: 
     );
   return (
     <Card className="w-full max-w-sm overflow-hidden">
-      <div className="bg-accent px-5 py-4 text-white">
+      <div className="bg-accent px-5 py-4 text-accent-ink">
         <div className="text-xs opacity-80">{t.church}</div>
         <h1 className="text-lg leading-tight font-semibold">{t.event.title}</h1>
       </div>

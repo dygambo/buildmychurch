@@ -534,7 +534,7 @@ function Funnel({ f }: { f: { firstTimers: number; cameBack: number; stayed: num
             <div key={s.label} className="flex items-center gap-3 text-[13px]">
               <span className="w-44 shrink-0 text-muted">{s.label}</span>
               <span className="h-6 flex-1 overflow-hidden rounded-md bg-surface-2">
-                <span className="flex h-full items-center rounded-md bg-accent px-2 text-xs font-semibold text-white" style={{ width: `${Math.max(8, (s.n / f.firstTimers) * 100)}%` }}>
+                <span className="flex h-full items-center rounded-md bg-accent px-2 text-xs font-semibold text-accent-ink" style={{ width: `${Math.max(8, (s.n / f.firstTimers) * 100)}%` }}>
                   {s.n}
                 </span>
               </span>
