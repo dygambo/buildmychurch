@@ -78,6 +78,10 @@ export const users = pgTable("users", {
   failedLogins: integer("failed_logins").notNull().default(0),
   lockedUntil: ts("locked_until"),
   lastLoginAt: ts("last_login_at"),
+  /** Set when an admin creates the account or resets the password: the user picks their own at next sign-in. */
+  mustChangePassword: boolean("must_change_password").notNull().default(false),
+  /** A temporary password stops working after this. */
+  tempPasswordExpiresAt: ts("temp_password_expires_at"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -119,6 +123,9 @@ export const memberships = pgTable(
       .default(sql`'{}'::uuid[]`),
     title: text("title"),
     staffId: text("staff_id"),
+    /** Their record in the members directory, when they were added from it. */
+    memberId: uuid("member_id"),
+    /** "disabled" is shown as Suspended: they keep their role but can't open this church. */
     status: text("status", { enum: ["active", "disabled"] })
       .notNull()
       .default("active"),
@@ -213,18 +220,29 @@ export const rateLimits = pgTable("rate_limits", {
   resetAt: ts("reset_at").notNull(),
 });
 
-/** Uploaded files (logos, memo attachments, photos). Bytes live in the storage provider. */
-export const files = pgTable("files", {
-  id: id(),
-  orgId: orgId(),
-  name: text("name").notNull(),
-  mime: text("mime").notNull(),
-  size: integer("size").notNull(),
-  storageKey: text("storage_key").notNull(),
-  sha256: text("sha256").notNull(),
-  uploadedBy: uuid("uploaded_by"),
-  createdAt: createdAt(),
-});
+/**
+ * Uploaded files (receipts, invoices, memo attachments, photos), each attached to one record.
+ * The bytes live in the storage provider under `storageKey`.
+ */
+export const files = pgTable(
+  "files",
+  {
+    id: id(),
+    orgId: orgId(),
+    name: text("name").notNull(),
+    mime: text("mime").notNull(),
+    size: integer("size").notNull(),
+    storageKey: text("storage_key").notNull(),
+    sha256: text("sha256").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: uuid("entity_id").notNull(),
+    uploadedBy: uuid("uploaded_by"),
+    uploadedByName: text("uploaded_by_name"),
+    deletedAt: ts("deleted_at"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("files_entity_idx").on(t.orgId, t.entityType, t.entityId)],
+);
 
 /** Development mailbox: when EMAIL_PROVIDER=log, emails land here instead of being sent. */
 export const devMailbox = pgTable("dev_mailbox", {
@@ -233,7 +251,7 @@ export const devMailbox = pgTable("dev_mailbox", {
   subject: text("subject").notNull(),
   html: text("html").notNull(),
   text: text("text"),
-  channel: text("channel", { enum: ["email", "sms"] })
+  channel: text("channel", { enum: ["email", "sms", "whatsapp"] })
     .notNull()
     .default("email"),
   createdAt: createdAt(),

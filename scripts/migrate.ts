@@ -15,7 +15,8 @@ export async function runMigrations(adminUrl: string, appRole: string) {
     await sql`GRANT USAGE ON SCHEMA public TO ${role}`;
     await sql`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${role}`;
     await sql`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${role}`;
-    await sql`REVOKE UPDATE, DELETE, TRUNCATE ON audit_logs FROM ${role}`;
+    // append-only logs: the app can add records but never change or remove them
+    await sql`REVOKE UPDATE, DELETE, TRUNCATE ON audit_logs, child_events FROM ${role}`;
     await sql`REVOKE ALL ON SCHEMA drizzle FROM ${role}`.catch(() => {});
   } finally {
     await sql.end();
