@@ -34,6 +34,8 @@ import { deskSchema, eventSchema, registerAtDesk, saveEvent, setEventStatus } fr
 import { autoFill, fillSchema, sundays } from "@/server/services/rota";
 import { addEntry, addPrayer, caseSchema, entrySchema, markPrayed, prayerLink, prayerSchema, publicPrayerSchema, saveCase, submitPublicPrayer, updatePrayer } from "@/server/services/care";
 import { createForm, getForm, setFormStatus, submitForm } from "@/server/services/forms";
+import { caseSchema as counselCaseSchema, completeCase, completeSchema, publicRequestSchema, recordSchema, recordSession, requestLink, saveCase as saveCounselCase, scheduleSession, sessionSchema, submitRequest, toggleChecklist } from "@/server/services/counselling";
+import { counsellingSessions } from "@/server/db/schema";
 import { rotaSlots, ticketTypes } from "@/server/db/schema";
 import { groups } from "@/server/db/schema";
 import {
@@ -460,6 +462,7 @@ async function main() {
   await seedEvents(r.orgId, row!.u.id);
   await seedCare(r.orgId, row!.u.id);
   await seedTestAccounts(r.orgId);
+  await seedCounselling(r.orgId, row!.u.id);
   console.log(`Demo church created with 120 members. Every account below uses the password ${DEMO.password}`);
   console.table([
     { email: DEMO.email, role: "Super Admin (owner)" },
@@ -1085,6 +1088,7 @@ export const TEST_ACCOUNTS = [
   { role: "followup", email: "followup@graceassembly.ng", name: "Sis. Funke Bello", title: "Follow-up and Care" },
   { role: "children", email: "children@graceassembly.ng", name: "Sis. Amaka Obi", title: "Children's Church Coordinator" },
   { role: "worker", email: "worker@graceassembly.ng", name: "Bro. Tobi Lawal", title: "Usher" },
+  { role: "counsellor", email: "counsellor@graceassembly.ng", name: "Dcn. & Dcns. Adeyinka", title: "Marriage Counsellor" },
 ] as const;
 export const PORTAL_MEMBER_EMAIL = "member@graceassembly.ng";
 
@@ -1102,6 +1106,44 @@ async function seedTestAccounts(orgId: string) {
     if (slot?.memberId)
       await tx.update(members).set({ emailEnc: encrypt(PORTAL_MEMBER_EMAIL), emailHash: blindIndex(PORTAL_MEMBER_EMAIL) }).where(eq(members.id, slot.memberId));
   });
+}
+
+async function seedCounselling(orgId: string, ownerId: string) {
+  const owner = await actorFor(ownerId, orgId);
+  const [cu] = await db.select({ id: users.id }).from(users).where(eq(users.email, "counsellor@graceassembly.ng"));
+  if (!cu) return;
+  const counsellor = await actorFor(cu.id, orgId);
+  const day = (n: number) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  const local = (n: number, t: string) => `${new Date(Date.now() + n * 86400000 + 3600000).toISOString().slice(0, 10)}T${t}`;
+  const link = await withOrg(orgId, async (tx) => {
+    const people = await tx.select({ id: members.id }).from(members).where(and(isNull(members.deletedAt), eq(members.stage, "member"))).limit(12);
+    // a couple in pre-marital counselling, three sessions in
+    const id = await saveCounselCase(
+      tx,
+      owner,
+      counselCaseSchema.parse({ kind: "premarital", aMemberId: people[5]!.id, bName: "Olumide Fashola", bPhone: "08061230011", bEmail: "olumide.f@example.com", weddingDate: day(75), weddingVenue: "Main auditorium", counsellorIds: [cu.id], reason: "Introduced by the youth pastor. Both keen; families have met.", plannedSessions: 8 }),
+    );
+    const topics = ["God's design for marriage", "Our backgrounds and expectations", "Communication"];
+    for (const [i, topic] of topics.entries()) {
+      const [s] = await tx.insert(counsellingSessions).values({ orgId, caseId: id, topic, startsAt: new Date(`${day(-(21 - i * 7))}T17:00:00+01:00`), location: "Pastor's office", counsellorId: cu.id, counsellorName: "Dcn. & Dcns. Adeyinka" }).returning({ id: counsellingSessions.id });
+      await recordSession(tx, counsellor, recordSchema.parse({ id: s!.id, status: "held", attended: "both", notes: i === 1 ? "Different expectations about where to live after the wedding. Agreed to talk with both families." : "Engaged and open.", homework: i === 2 ? "Each write a letter about how you prefer to settle disagreements." : null }));
+    }
+    await scheduleSession(tx, counsellor, sessionSchema.parse({ caseId: id, topic: "Handling conflict", startsAt: local(4, "17:00"), location: "Pastor's office", notify: false }));
+    for (const key of ["form", "genotype", "medical", "membership"]) await toggleChecklist(tx, counsellor, { id, key, done: true });
+
+    // a married couple getting support
+    await saveCounselCase(tx, owner, counselCaseSchema.parse({ kind: "marital", aMemberId: people[8]!.id, bMemberId: people[9]!.id, marriedSince: "2016-12-10", counsellorIds: [cu.id], reason: "Strain since the husband lost his job. Arguments about money.", plannedSessions: 6 }));
+
+    // a couple who finished and were cleared
+    const done = await saveCounselCase(tx, owner, counselCaseSchema.parse({ kind: "premarital", aMemberId: people[10]!.id, bName: "Ifeanyi Nwosu", weddingDate: day(20), counsellorIds: [cu.id], plannedSessions: 8 }));
+    for (const [i, topic] of ["God's design for marriage", "Our backgrounds and expectations", "Communication", "Handling conflict", "Money and finances", "Family and in-laws", "Sex and intimacy", "The wedding and the first year"].entries())
+      await tx.insert(counsellingSessions).values({ orgId, caseId: done, topic, startsAt: new Date(`${day(-(60 - i * 7))}T17:00:00+01:00`), location: "Pastor's office", counsellorId: cu.id, counsellorName: "Dcn. & Dcns. Adeyinka", status: "held", attended: "both" });
+    for (const key of ["form", "genotype", "medical", "membership", "baptism", "parents", "registry", "booking"]) await toggleChecklist(tx, counsellor, { id: done, key, done: true });
+    await completeCase(tx, owner, completeSchema.parse({ id: done, outcome: "cleared", summary: "Completed all eight sessions. Ready." }));
+    return requestLink(tx, owner);
+  });
+  // and one new request from the online page
+  await submitRequest(link.split("/mc/")[1]!, publicRequestSchema.parse({ kind: "premarital", aName: "Blessing Okon", aPhone: "08099887766", aEmail: "blessing.okon@example.com", bName: "Samuel Etim", weddingDate: day(120), reason: "We'd like to start counselling before we fix the date with our families." }));
 }
 
 main()

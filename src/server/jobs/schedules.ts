@@ -70,5 +70,8 @@ every(60, async (now) => {
   if (c.hour !== 17) return;
   const tomorrow = new Date(new Date(`${c.date}T12:00:00Z`).getTime() + 86400_000).toISOString().slice(0, 10);
   const orgs = await db.select({ id: organisations.id }).from(organisations);
-  for (const o of orgs) await enqueue(db, "rota.remind", { date: tomorrow }, { orgId: o.id, dedupeKey: `rota-remind:${o.id}:${tomorrow}` });
+  for (const o of orgs) {
+    await enqueue(db, "rota.remind", { date: tomorrow }, { orgId: o.id, dedupeKey: `rota-remind:${o.id}:${tomorrow}` });
+    await enqueue(db, "counselling.remind", { date: tomorrow }, { orgId: o.id, dedupeKey: `counselling-remind:${o.id}:${tomorrow}` });
+  }
 });

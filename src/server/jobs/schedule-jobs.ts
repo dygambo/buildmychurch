@@ -18,6 +18,12 @@ registerJob("schedule.complete", async (job) => {
   await completePastSchedules(job.orgId!);
 });
 
+registerJob("counselling.remind", async (job) => {
+  const { date } = job.payload as { date: string };
+  const { sendSessionReminders } = await import("../services/counselling");
+  await sendSessionReminders(job.orgId!, date);
+});
+
 registerJob("rota.remind", async (job) => {
   const { date } = job.payload as { date: string };
   await sendRotaReminders(job.orgId!, date);

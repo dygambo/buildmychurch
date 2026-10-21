@@ -26,7 +26,7 @@ import { createdAt, id, orgId, ts, updatedAt } from "./_helpers";
 export const publicLinks = pgTable("public_links", {
   token: text("token").primaryKey(),
   orgId: orgId(),
-  kind: text("kind", { enum: ["service_checkin", "visitor_form", "schedule", "event", "form", "prayer"] }).notNull(),
+  kind: text("kind", { enum: ["service_checkin", "visitor_form", "schedule", "event", "form", "prayer", "counselling"] }).notNull(),
   targetId: uuid("target_id"),
   createdAt: createdAt(),
   expiresAt: ts("expires_at"),

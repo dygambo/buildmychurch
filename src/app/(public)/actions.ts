@@ -4,6 +4,7 @@ import { eventToken, failRegistration, registerForEvent, registerSchema } from "
 import { respondSchema, respondToSlot } from "@/server/services/rota";
 import { publicPrayerSchema, submitPublicPrayer } from "@/server/services/care";
 import { submitForm } from "@/server/services/forms";
+import { publicRequestSchema, submitRequest } from "@/server/services/counselling";
 import { eventRegistrations } from "@/server/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
@@ -194,5 +195,16 @@ export async function formAction(input: { token: string; answers: Record<string,
     const ip = await clientIp();
     if (!(await rateLimit(`form:${ip}`, 30, 3600))) throw new AppError("Too many responses from this phone in the last hour. Try again later.");
     return submitForm(String(input.token), input.answers ?? {});
+  });
+}
+
+/** A couple asks for marriage counselling from the church's request page. */
+export async function counsellingRequestAction(input: { token: string; values: Record<string, unknown> }) {
+  return guard(async () => {
+    const ip = await clientIp();
+    if (!(await rateLimit(`counselling-req:${ip}`, 5, 3600))) throw new AppError("Too many requests from this phone in the last hour. Try again later, or speak to a pastor.");
+    const parsed = publicRequestSchema.safeParse(input.values);
+    if (!parsed.success) throw new AppError("Please check the highlighted fields.", zodFieldErrors(parsed.error));
+    return submitRequest(String(input.token), parsed.data);
   });
 }
