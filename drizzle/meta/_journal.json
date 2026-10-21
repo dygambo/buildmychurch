@@ -22,6 +22,160 @@
       "when": 1792056439859,
       "tag": "0002_dev_mailbox",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792058589833,
+      "tag": "0003_ministry",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792058590770,
+      "tag": "0004_ministry_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792074492197,
+      "tag": "0005_giving",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792074493630,
+      "tag": "0006_giving_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792076870769,
+      "tag": "0007_expenses",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792076872872,
+      "tag": "0008_expenses_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792078538972,
+      "tag": "0009_messaging",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792078540520,
+      "tag": "0010_messaging_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792089261977,
+      "tag": "0011_schedules",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792089263538,
+      "tag": "0012_schedules_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792092787051,
+      "tag": "0013_memos",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792092788524,
+      "tag": "0014_memos_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1792094014248,
+      "tag": "0015_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792094015764,
+      "tag": "0016_events_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792095922989,
+      "tag": "0017_care_forms",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792095924363,
+      "tag": "0018_care_forms_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792098631699,
+      "tag": "0019_portal",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792098633376,
+      "tag": "0020_portal_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792237610565,
+      "tag": "0021_team_admin",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792620721053,
+      "tag": "0022_counselling",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792620722223,
+      "tag": "0023_counselling_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792620972681,
+      "tag": "0024_counsellor_role",
+      "breakpoints": true
     }
   ]
 }

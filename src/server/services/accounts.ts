@@ -1,6 +1,12 @@
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { db, withOrg } from "../db";
 import { authTokens, branches, memberships, organisations, roles, users } from "../db/schema";
+import { createDefaultFunds } from "./giving";
+import { createDefaultCategories } from "./expenses";
+import { grantWelcomeUnits, STARTER_TEMPLATES } from "./messaging";
+import { createDefaultScheduleTemplates } from "./schedules";
+import { createMemoDefaults } from "./memos";
+import { messageTemplates } from "../db/schema";
 import { DEFAULT_ROLES } from "../auth/permissions";
 import { hashPassword, passwordProblem, verifyPassword } from "../auth/password";
 import { decrypt, encrypt, randomToken, sha256 } from "../crypto";
@@ -91,6 +97,12 @@ export async function signUp(input: SignUpInput) {
     // Branch rows are protected by row-level security, so scope this part of the transaction to the new church.
     await tx.execute(sql`select set_config('app.org_id', ${org!.id}, true)`);
     await tx.insert(branches).values({ orgId: org!.id, name: "Headquarters", code: "HQ", path: "hq", level: "hq" });
+    await createDefaultFunds(tx, org!.id);
+    await createDefaultCategories(tx, org!.id);
+    await grantWelcomeUnits(tx, org!.id);
+    await createDefaultScheduleTemplates(tx, org!.id);
+    await createMemoDefaults(tx, org!.id);
+    await tx.insert(messageTemplates).values(STARTER_TEMPLATES.map((t) => ({ ...t, orgId: org!.id })));
     await audit(
       tx,
       { user: { id: user!.id, name: user!.name }, org: { id: org!.id } },
@@ -106,10 +118,11 @@ export async function signUp(input: SignUpInput) {
 }
 
 export type SignInResult =
-  | { status: "ok"; userId: string }
+  | { status: "ok"; userId: string; mustChange: boolean }
   | { status: "mfa"; userId: string }
   | { status: "invalid" }
-  | { status: "locked"; minutes: number };
+  | { status: "locked"; minutes: number }
+  | { status: "expired" };
 
 export async function checkCredentials(emailRaw: string, password: string): Promise<SignInResult> {
   const email = emailRaw.trim().toLowerCase();
@@ -132,8 +145,9 @@ export async function checkCredentials(emailRaw: string, password: string): Prom
       .where(eq(users.id, u.id));
     return failed >= LOCK_AFTER ? { status: "locked", minutes: LOCK_MINUTES } : { status: "invalid" };
   }
+  if (u.mustChangePassword && u.tempPasswordExpiresAt && u.tempPasswordExpiresAt.getTime() < Date.now()) return { status: "expired" };
   await db.update(users).set({ failedLogins: 0, lockedUntil: null, lastLoginAt: new Date() }).where(eq(users.id, u.id));
-  return u.mfaEnabled ? { status: "mfa", userId: u.id } : { status: "ok", userId: u.id };
+  return u.mfaEnabled ? { status: "mfa", userId: u.id } : { status: "ok", userId: u.id, mustChange: u.mustChangePassword };
 }
 
 /** Accepts an authenticator code or a one-time recovery code. */
@@ -186,15 +200,13 @@ export async function createPasswordReset(
   const [u] = await db.select().from(users).where(eq(users.email, email)).limit(1);
   if (!u) return null;
   const token = randomToken(32);
-  await db
-    .insert(authTokens)
-    .values({
-      userId: u.id,
-      email,
-      purpose: "password_reset",
-      tokenHash: sha256(token),
-      expiresAt: new Date(Date.now() + 60 * 60000),
-    });
+  await db.insert(authTokens).values({
+    userId: u.id,
+    email,
+    purpose: "password_reset",
+    tokenHash: sha256(token),
+    expiresAt: new Date(Date.now() + 60 * 60000),
+  });
   return { token, user: { id: u.id, name: u.name, email: u.email } };
 }
 
@@ -216,7 +228,7 @@ export async function resetPassword(token: string, password: string) {
   if (problem) throw new AppError(problem, { password: problem });
   await db
     .update(users)
-    .set({ passwordHash: await hashPassword(password), failedLogins: 0, lockedUntil: null })
+    .set({ passwordHash: await hashPassword(password), failedLogins: 0, lockedUntil: null, mustChangePassword: false, tempPasswordExpiresAt: null })
     .where(eq(users.id, t.userId));
   await db.update(authTokens).set({ usedAt: new Date() }).where(eq(authTokens.id, t.id));
   return t.userId;
@@ -303,15 +315,13 @@ export async function acceptInvite(token: string, password: string, name?: strin
         .set({ roleId: inv.data.roleId, branchIds: inv.data.branchIds, status: "active", title: inv.data.title })
         .where(eq(memberships.id, existing.id));
     else
-      await tx
-        .insert(memberships)
-        .values({
-          orgId: inv.orgId,
-          userId: u!.id,
-          roleId: inv.data.roleId,
-          branchIds: inv.data.branchIds,
-          title: inv.data.title,
-        });
+      await tx.insert(memberships).values({
+        orgId: inv.orgId,
+        userId: u!.id,
+        roleId: inv.data.roleId,
+        branchIds: inv.data.branchIds,
+        title: inv.data.title,
+      });
     await tx.update(authTokens).set({ usedAt: new Date() }).where(eq(authTokens.id, inv.tokenId));
     await audit(
       tx,
@@ -325,4 +335,14 @@ export async function acceptInvite(token: string, password: string, name?: strin
     );
   });
   return { userId: u!.id, orgId: inv.orgId };
+}
+
+/** First sign-in with a temporary password: the user picks their own. */
+export async function replaceTemporaryPassword(userId: string, next: string) {
+  const [u] = await db.select().from(users).where(eq(users.id, userId));
+  if (!u?.mustChangePassword) throw new AppError("Your password is already set. Go to your dashboard.");
+  if (await verifyPassword(u.passwordHash, next)) throw new AppError("Choose a new password, not the temporary one.", { password: "Use a different password." });
+  const problem = passwordProblem(next, { email: u.email });
+  if (problem) throw new AppError(problem, { password: problem });
+  await db.update(users).set({ passwordHash: await hashPassword(next), mustChangePassword: false, tempPasswordExpiresAt: null }).where(eq(users.id, userId));
 }

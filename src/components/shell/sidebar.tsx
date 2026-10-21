@@ -21,7 +21,7 @@ type Props = {
   nav: NavGroup[];
   badges: Record<string, { count: number; tone?: "accent" | "bad" }>;
   user: { name: string; email: string; role: string };
-  org: { id: string; name: string; plan: string };
+  org: { id: string; name: string; plan: string; logoUrl?: string | null };
   orgs: { id: string; name: string; role: string }[];
   switchOrg: (orgId: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -35,7 +35,11 @@ const subscribeTheme = (cb: () => void) => {
 };
 
 function ThemeToggle() {
-  const dark = useSyncExternalStore(subscribeTheme, () => document.documentElement.classList.contains("dark"), () => false);
+  const dark = useSyncExternalStore(
+    subscribeTheme,
+    () => document.documentElement.classList.contains("dark"),
+    () => false,
+  );
   return (
     <button
       type="button"
@@ -78,7 +82,12 @@ export function AppShell({ nav, badges, user, org, orgs, switchOrg, signOut, chi
         )}
       >
         <Link href="/dashboard" className="mb-3" aria-label="Dashboard">
-          <Logo className="size-[38px]" />
+          {org.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- church logo from our own route
+            <img src={org.logoUrl} alt={org.name} className="size-[38px] rounded-[9px] bg-white object-contain p-1" />
+          ) : (
+            <Logo className="size-[38px]" />
+          )}
         </Link>
         <div className="flex-1" />
         <ThemeToggle />
@@ -92,14 +101,19 @@ export function AppShell({ nav, badges, user, org, orgs, switchOrg, signOut, chi
       >
         <Dropdown>
           <DropdownTrigger className="flex items-center gap-2.5 border-b border-line px-4 pt-4 pb-3.5 text-left hover:bg-surface-2">
-            <div className="grid size-[30px] shrink-0 place-items-center rounded-lg bg-accent-soft text-xs font-bold text-accent">
-              {org.name
-                .split(/\s+/)
-                .slice(0, 2)
-                .map((w) => w[0])
-                .join("")
-                .toUpperCase()}
-            </div>
+            {org.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- small church logo from our own route
+              <img src={org.logoUrl} alt="" className="size-[30px] shrink-0 rounded-lg bg-white object-contain p-0.5" />
+            ) : (
+              <div className="grid size-[30px] shrink-0 place-items-center rounded-lg bg-accent-soft text-xs font-bold text-accent">
+                {org.name
+                  .split(/\s+/)
+                  .slice(0, 2)
+                  .map((w) => w[0])
+                  .join("")
+                  .toUpperCase()}
+              </div>
+            )}
             <div className="min-w-0 flex-1">
               <b className="block truncate text-[13.5px] leading-tight">{org.name}</b>
               <small className="text-xs text-faint capitalize">{org.plan} plan</small>

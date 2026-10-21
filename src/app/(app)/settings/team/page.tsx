@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireCtx } from "@/server/auth/context";
 import { withOrg } from "@/server/db";
 import { listBranches, listRoles, listTeam } from "@/server/services/org";
+import { teamMemberLinks } from "@/server/services/team";
 import { TeamView } from "./view";
 
 export const metadata: Metadata = { title: "Team" };
@@ -10,14 +11,20 @@ export const metadata: Metadata = { title: "Team" };
 export default async function TeamPage() {
   const ctx = await requireCtx();
   if (!ctx.can("users.manage")) redirect("/settings/account");
-  const { team, roles, branches } = await withOrg(ctx.org.id, async (tx) => ({
-    team: await listTeam(tx, ctx),
-    roles: await listRoles(tx, ctx),
-    branches: await listBranches(tx),
-  }));
+  const { team, roles, branches, links } = await withOrg(ctx.org.id, async (tx) => {
+    const team = await listTeam(tx, ctx);
+    return {
+      team,
+      roles: await listRoles(tx, ctx),
+      branches: await listBranches(tx),
+      links: await teamMemberLinks(tx, team.people.map((p) => ({ membershipId: p.m.id, memberId: p.m.memberId, email: p.u.email }))),
+    };
+  });
   return (
     <TeamView
       me={ctx.user.id}
+      iAmOwner={ctx.membership.roleKey === "owner"}
+      canEditMembers={ctx.can("members.write")}
       people={team.people.map((p) => ({
         membershipId: p.m.id,
         userId: p.u.id,
@@ -32,6 +39,8 @@ export default async function TeamPage() {
         staffId: p.m.staffId ?? "",
         mfa: p.u.mfaEnabled,
         lastLogin: p.u.lastLoginAt?.toISOString() ?? null,
+        pendingFirstSignIn: p.u.mustChangePassword,
+        memberId: links[p.m.id] ?? null,
       }))}
       invites={team.invites.map((i) => ({
         id: i.id,
