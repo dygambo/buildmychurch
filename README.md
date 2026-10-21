@@ -36,6 +36,7 @@ The first run takes a few minutes. When the log says `Ready`, open http://localh
 | followup@graceassembly.ng | Follow-up and care |
 | children@graceassembly.ng | Children's ministry |
 | worker@graceassembly.ng | Worker (usher) |
+| counsellor@graceassembly.ng | Marriage Counsellor (sees only their couples) |
 
 Emails and SMS aren't sent anywhere: read them at http://localhost:3000/dev/mailbox. Payments use a practice checkout. The member page link is in Settings; sign in there as `member@graceassembly.ng` and take the code from the mailbox. Stop with Ctrl+C; `docker compose -f docker-compose.demo.yml down -v` deletes the demo data.
 
