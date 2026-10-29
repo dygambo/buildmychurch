@@ -1,5 +1,5 @@
 import postgres from "postgres";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/server/db";
 import { memberships, organisations, roles, users } from "@/server/db/schema";
 import type { Ctx } from "@/server/auth/context";
@@ -23,6 +23,20 @@ export async function newChurch(name = `Test Church ${++n}`) {
   const email = `owner${n}_${Date.now()}@example.com`;
   const r = await signUp({ churchName: name, name: "Pastor Test", email, password: "Correct-Horse-Battery-9" });
   return { ...r, email, ctx: await ctxFor(r.userId, r.orgId) };
+}
+
+/** Adds a second staff member with the given role, for rules that need two different people. */
+export async function addStaff(orgId: string, roleKey: string, name = `Staff ${++n}`) {
+  const [r] = await db
+    .select({ id: roles.id })
+    .from(roles)
+    .where(and(eq(roles.orgId, orgId), eq(roles.key, roleKey)));
+  const [u] = await db
+    .insert(users)
+    .values({ email: `staff${n}_${Date.now()}@example.com`, name, passwordHash: "x" })
+    .returning({ id: users.id });
+  await db.insert(memberships).values({ orgId, userId: u!.id, roleId: r!.id });
+  return { userId: u!.id, ctx: await ctxFor(u!.id, orgId) };
 }
 
 export async function ctxFor(userId: string, orgId: string, roleKey?: string): Promise<Ctx> {

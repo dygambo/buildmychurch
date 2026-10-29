@@ -3,7 +3,11 @@ import { redirect } from "next/navigation";
 import { requireCtx } from "@/server/auth/context";
 import { withOrg } from "@/server/db";
 import { getOrg } from "@/server/services/org";
+import { portalUrl } from "@/server/services/portal";
 import { OrgForm } from "./org-form";
+import { MemberPageCard } from "./member-page";
+import { BrandingCard } from "./branding";
+import { brandUrl, getBrand } from "@/server/services/brand";
 
 export const metadata: Metadata = { title: "Church profile" };
 
@@ -11,19 +15,24 @@ export default async function ChurchSettingsPage() {
   const ctx = await requireCtx();
   if (!ctx.can("settings.manage")) redirect("/settings/account");
   const org = await withOrg(ctx.org.id, (tx) => getOrg(tx, ctx));
+  const brand = await getBrand(ctx.org.id);
   return (
-    <OrgForm
-      org={{
-        name: org.name,
-        denomination: org.denomination ?? "",
-        state: org.state ?? "",
-        lga: org.lga ?? "",
-        address: org.address ?? "",
-        phone: org.phone ?? "",
-        email: org.email ?? "",
-        smsSenderId: org.smsSenderId ?? "",
-        slug: org.slug,
-      }}
-    />
+    <>
+      <OrgForm
+        org={{
+          name: org.name,
+          denomination: org.denomination ?? "",
+          state: org.state ?? "",
+          lga: org.lga ?? "",
+          address: org.address ?? "",
+          phone: org.phone ?? "",
+          email: org.email ?? "",
+          smsSenderId: org.smsSenderId ?? "",
+          slug: org.slug,
+        }}
+      />
+      <BrandingCard churchName={org.name} logoUrl={brandUrl(ctx.org.id, "logo", brand)} faviconUrl={brandUrl(ctx.org.id, "favicon", brand)} accent={brand.accent} />
+      <MemberPageCard url={portalUrl(org.slug)} />
+    </>
   );
 }

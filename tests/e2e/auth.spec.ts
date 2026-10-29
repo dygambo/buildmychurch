@@ -57,7 +57,7 @@ test("settings pages load and a staff invitation can be accepted", async ({ page
   }
 
   await page.goto("/settings/team");
-  await page.getByRole("button", { name: "Invite someone" }).click();
+  await page.getByRole("button", { name: "Invite by email" }).click();
   const invitee = `funmi.${stamp}@example.com`;
   await page.getByLabel("Full name").fill("Funmi Adeyemi");
   await page.getByLabel("Email").fill(invitee);

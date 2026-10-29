@@ -15,26 +15,66 @@ export function naira(kobo: number, opts: { compact?: boolean } = {}): string {
 
 export const num = (n: number) => n.toLocaleString("en-NG");
 
-const fmt = (o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat("en-GB", { timeZone: TZ, ...o });
-const dShort = fmt({ day: "numeric", month: "short" });
-const dYear = fmt({ day: "numeric", month: "short", year: "numeric" });
-const dLong = fmt({ weekday: "long", day: "numeric", month: "long", year: "numeric" });
-const dWeek = fmt({ weekday: "short", day: "numeric", month: "short" });
-const tShort = fmt({ hour: "numeric", minute: "2-digit", hour12: true });
+/**
+ * Date parts in Lagos time, from a numeric formatter. Names are spelled out here rather than taken
+ * from Intl, because Node and browsers ship different locale data ("Sep" vs "Sept", narrow spaces),
+ * which would make server and browser render different text.
+ */
+const partsFmt = new Intl.DateTimeFormat("en-GB", {
+  timeZone: TZ,
+  year: "numeric",
+  month: "numeric",
+  day: "numeric",
+  hour: "numeric",
+  minute: "numeric",
+  hourCycle: "h23",
+  weekday: "short",
+});
+const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const WD_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MO = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MO_LONG = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+function lagosParts(d: Date) {
+  const p = Object.fromEntries(partsFmt.formatToParts(d).map((x) => [x.type, x.value]));
+  const year = Number(p.year);
+  const month = Number(p.month);
+  const day = Number(p.day);
+  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  return { year, month, day, weekday, hour: Number(p.hour) % 24, minute: Number(p.minute) };
+}
 
 const toDate = (d: Date | string) =>
   typeof d === "string" ? new Date(d.length === 10 ? d + "T12:00:00+01:00" : d) : d;
 
 /** Today's date in Lagos as YYYY-MM-DD. */
 export function todayISO(now = new Date()): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(now);
+  const p = lagosParts(now);
+  return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
 }
 export function formatDate(d: Date | string, style: "short" | "year" | "long" | "week" = "year"): string {
-  const x = toDate(d);
-  return { short: dShort, year: dYear, long: dLong, week: dWeek }[style].format(x);
+  const p = lagosParts(toDate(d));
+  if (style === "short") return `${p.day} ${MO[p.month - 1]}`;
+  if (style === "week") return `${WD[p.weekday]} ${p.day} ${MO[p.month - 1]}`;
+  if (style === "long") return `${WD_LONG[p.weekday]} ${p.day} ${MO_LONG[p.month - 1]} ${p.year}`;
+  return `${p.day} ${MO[p.month - 1]} ${p.year}`;
 }
 export function formatTime(d: Date | string): string {
-  return tShort.format(toDate(d)).replace(" ", " ").toUpperCase();
+  const p = lagosParts(toDate(d));
+  const h = p.hour % 12 || 12;
+  return `${h}:${String(p.minute).padStart(2, "0")} ${p.hour < 12 ? "AM" : "PM"}`;
 }
 export function formatDateTime(d: Date | string): string {
   return `${formatDate(d, "year")}, ${formatTime(d)}`;

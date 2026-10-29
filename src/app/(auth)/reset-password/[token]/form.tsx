@@ -10,6 +10,7 @@ export function ResetForm({ token }: { token: string }) {
   const { run, pending, fieldErrors } = useAction(resetPasswordAction, { onSuccess: (d) => router.replace(d.next) });
   return (
     <form
+      method="post"
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
