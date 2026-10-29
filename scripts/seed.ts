@@ -187,6 +187,7 @@ const pick = <T>(a: readonly T[]) => a[Math.floor(rand() * a.length)]!;
 async function main() {
   const [existing] = await db.select().from(users).where(eq(users.email, DEMO.email));
   if (existing) {
+    await topUpDemo(existing.id);
     console.log(`The demo church already exists. Sign in with ${DEMO.email} / ${DEMO.password}`);
     return;
   }
@@ -1092,15 +1093,31 @@ export const TEST_ACCOUNTS = [
 ] as const;
 export const PORTAL_MEMBER_EMAIL = "member@graceassembly.ng";
 
-async function seedTestAccounts(orgId: string) {
+/**
+ * Demo data loaded by an older version is kept, but accounts and samples added since are filled in,
+ * so pulling new code is enough to try new features.
+ */
+async function topUpDemo(ownerId: string) {
+  const [m] = await db.select({ orgId: memberships.orgId }).from(memberships).where(eq(memberships.userId, ownerId)).limit(1);
+  if (!m) return;
+  const before = await db.select({ email: users.email }).from(users).where(inArray(users.email, TEST_ACCOUNTS.map((a) => a.email)));
+  await seedTestAccounts(m.orgId, { onlyMissing: true });
+  const added = TEST_ACCOUNTS.filter((a) => !before.some((b) => b.email === a.email));
+  if (added.some((a) => a.role === "counsellor")) await seedCounselling(m.orgId, ownerId);
+  if (added.length) console.log(`Added demo accounts: ${added.map((a) => a.email).join(", ")} (password ${DEMO.password})`);
+}
+
+async function seedTestAccounts(orgId: string, opts: { onlyMissing?: boolean } = {}) {
   const pw = await hashPassword(DEMO.password);
   for (const a of TEST_ACCOUNTS) {
     const [role] = await db.select({ id: roles.id }).from(roles).where(and(eq(roles.orgId, orgId), eq(roles.key, a.role)));
     if (!role) continue;
+    if (opts.onlyMissing && (await db.select({ id: users.id }).from(users).where(eq(users.email, a.email))).length) continue;
     const [u] = await db.insert(users).values({ email: a.email, name: a.name, passwordHash: pw }).returning({ id: users.id });
     await db.insert(memberships).values({ orgId, userId: u!.id, roleId: role.id, title: a.title });
   }
   // a member who serves on the rota and gives, with a known email for the member page
+  if (opts.onlyMissing) return;
   await withOrg(orgId, async (tx) => {
     const [slot] = await tx.select({ memberId: rotaSlotsT.memberId }).from(rotaSlotsT).where(sql`${rotaSlotsT.memberId} is not null`).limit(1);
     if (slot?.memberId)
