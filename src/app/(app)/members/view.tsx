@@ -2,7 +2,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Cake, Download, FileSpreadsheet, Plus, Upload, Users, X } from "lucide-react";
+import { Cake, Download, Gem, FileSpreadsheet, Plus, Upload, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, EmptyState } from "@/components/ui/card";
@@ -22,6 +22,12 @@ import { bulkAction } from "./actions";
 import { MemberDrawer } from "./member-form";
 import { MONTHS, STAGE_LABEL, STAGE_TONE, STATUS_LABEL } from "./labels";
 
+const cnAnniv = (on: boolean) => `whitespace-nowrap text-muted ${on ? "max-md:hidden" : "max-xl:hidden"}`;
+const anniversaryLabel = (iso: string) => {
+  const [y, m, d] = iso.split("-").map(Number);
+  return `${d} ${MONTHS[m! - 1]!.slice(0, 3)} ${y}`;
+};
+
 type Row = {
   id: string;
   memberNo: string;
@@ -34,6 +40,7 @@ type Row = {
   phone: string | null;
   dobDay: number | null;
   dobMonth: number | null;
+  anniversary: string | null;
   joinDate: string;
   branchName: string;
   groups: string[];
@@ -80,6 +87,7 @@ export function MembersView({
     filters.tagId ||
     filters.gender ||
     filters.birthdays ||
+    filters.anniversaries ||
     filters.status
   );
   const exportQs = useMemo(() => {
@@ -198,8 +206,12 @@ export function MembersView({
               <option value="male">Male</option>
             </FilterSelect>
             <FilterSelect label="Birthdays" value={filters.birthdays} onChange={(v) => setParam("birthdays", v)}>
-              <option value="week">Next 7 days</option>
-              <option value="month">This month</option>
+              <option value="week">Birthdays: next 7 days</option>
+              <option value="month">Birthdays: this month</option>
+            </FilterSelect>
+            <FilterSelect label="Anniversaries" value={filters.anniversaries} onChange={(v) => setParam("anniversaries", v)}>
+              <option value="week">Anniversaries: next 7 days</option>
+              <option value="month">Anniversaries: this month</option>
             </FilterSelect>
             <FilterSelect label="Status: active" value={filters.status} onChange={(v) => setParam("status", v)}>
               {Object.entries(STATUS_LABEL)
@@ -340,6 +352,7 @@ export function MembersView({
                   <Th>Stage</Th>
                   {branches.length > 1 && <Th className="max-lg:hidden">Branch</Th>}
                   <Th className="max-md:hidden">Birthday</Th>
+                  <Th className={filters.anniversaries ? "max-md:hidden" : "max-xl:hidden"}>Anniversary</Th>
                 </tr>
               </thead>
               <tbody>
@@ -384,6 +397,16 @@ export function MembersView({
                         <span className="inline-flex items-center gap-1">
                           {filters.birthdays && <Cake className="size-3.5 text-c2" />}
                           {r.dobDay} {MONTHS[r.dobMonth - 1]!.slice(0, 3)}
+                        </span>
+                      ) : (
+                        <span className="text-faint">—</span>
+                      )}
+                    </Td>
+                    <Td className={cnAnniv(!!filters.anniversaries)}>
+                      {r.anniversary ? (
+                        <span className="inline-flex items-center gap-1">
+                          {filters.anniversaries && <Gem className="size-3.5 text-c5" />}
+                          {anniversaryLabel(r.anniversary)}
                         </span>
                       ) : (
                         <span className="text-faint">—</span>

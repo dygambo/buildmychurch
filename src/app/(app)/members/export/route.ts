@@ -21,6 +21,7 @@ export async function GET(req: Request) {
 
   const sp = new URL(req.url).searchParams;
   const get = (k: string) => sp.get(k) || undefined;
+  const range = (v?: string) => (v === "week" || v === "month" ? v : undefined);
   const filters: MemberFilters = {
     q: get("q"),
     stage: get("stage"),
@@ -29,7 +30,8 @@ export async function GET(req: Request) {
     groupId: get("group"),
     tagId: get("tag"),
     gender: get("gender"),
-    birthdays: get("birthdays") === "week" ? "week" : get("birthdays") === "month" ? "month" : undefined,
+    birthdays: range(get("birthdays")),
+    anniversaries: range(get("anniversaries")),
   };
   const rows = await withOrg(ctx.org.id, (tx) => exportRows(tx, ctx, filters));
   const stamp = new Date().toISOString().slice(0, 10);

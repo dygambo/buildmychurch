@@ -12,6 +12,8 @@ export const metadata: Metadata = { title: "Members" };
 type SP = Promise<Record<string, string | string[] | undefined>>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || undefined;
 
+const range = (v?: string) => (v === "week" || v === "month" ? v : undefined);
+
 export default async function MembersPage({ searchParams }: { searchParams: SP }) {
   const ctx = await requireCtx();
   if (!ctx.can("members.read")) return <NoAccess what="see members" />;
@@ -24,7 +26,8 @@ export default async function MembersPage({ searchParams }: { searchParams: SP }
     groupId: one(sp.group),
     tagId: one(sp.tag),
     gender: one(sp.gender),
-    birthdays: one(sp.birthdays) === "week" ? "week" : one(sp.birthdays) === "month" ? "month" : undefined,
+    birthdays: range(one(sp.birthdays)),
+    anniversaries: range(one(sp.anniversaries)),
     page: Number(one(sp.page)) || 1,
   };
   const { list, branches, groups, tags } = await withOrg(ctx.org.id, async (tx) => ({

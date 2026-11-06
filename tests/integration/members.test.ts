@@ -181,11 +181,31 @@ describe("members", () => {
         person(b, { firstName: "Later", phone: "", email: "", dobDay: in20.getDate(), dobMonth: in20.getMonth() + 1 }),
       ),
     );
+    const in2 = new Date(today.getTime() + 2 * 86400000);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    await withOrg(c.orgId, (tx) =>
+      createMember(
+        tx,
+        c.ctx,
+        person(b, {
+          firstName: "Wedded",
+          phone: "",
+          email: "",
+          maritalStatus: "married",
+          anniversary: `${in2.getFullYear() - 10}-${pad(in2.getMonth() + 1)}-${pad(in2.getDate())}`,
+        }),
+      ),
+    );
     const r = await withOrg(c.orgId, (tx) => listMembers(tx, c.ctx, { birthdays: "week" }));
     expect(r.rows.map((x) => x.firstName)).toEqual(["Chidinma"]);
+    const a = await withOrg(c.orgId, (tx) => listMembers(tx, c.ctx, { anniversaries: "week" }));
+    expect(a.rows.map((x) => x.firstName)).toEqual(["Wedded"]);
     const stats = await withOrg(c.orgId, (tx) => memberStats(tx, c.ctx));
-    expect(stats.birthdays).toHaveLength(1);
-    expect(stats.total).toBe(2);
+    expect(stats.celebrations.map((x) => [x.firstName, x.kind, x.daysAway, x.years])).toEqual([
+      ["Wedded", "anniversary", 2, 10],
+      ["Chidinma", "birthday", 3, null],
+    ]);
+    expect(stats.total).toBe(3);
     expect(stats.growth).toHaveLength(12);
   });
 

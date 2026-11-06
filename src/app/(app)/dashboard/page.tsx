@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Building2, Cake, CheckCircle2, Circle, HandCoins, Upload, UserPlus } from "lucide-react";
+import { Building2, Cake, CheckCircle2, Gem, Circle, HandCoins, Upload, UserPlus } from "lucide-react";
 import { count, eq } from "drizzle-orm";
 import { requireCtx } from "@/server/auth/context";
 import { withOrg } from "@/server/db";
@@ -265,20 +265,25 @@ function PeopleOverview({
         <CardHeader
           title={
             <span className="flex items-center gap-2">
-              <Cake className="size-4 text-c2" /> Birthdays in the next 7 days
+              <Cake className="size-4 text-c2" /> Birthdays and anniversaries in the next 7 days
             </span>
           }
           action={
-            <Link href="/members?birthdays=week" className="text-[13px] text-accent">
-              See all
-            </Link>
+            <span className="flex gap-3 text-[13px]">
+              <Link href="/members?birthdays=week" className="text-accent">
+                All birthdays
+              </Link>
+              <Link href="/members?anniversaries=week" className="text-accent">
+                All anniversaries
+              </Link>
+            </span>
           }
         />
         <CardBody>
-          {s.birthdays.length ? (
+          {s.celebrations.length ? (
             <ul className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
-              {s.birthdays.map((b) => (
-                <li key={b.id}>
+              {s.celebrations.map((b) => (
+                <li key={`${b.kind}-${b.id}`}>
                   <Link
                     href={`/members/${b.id}`}
                     className="flex items-center gap-2.5 rounded-xl p-1 hover:bg-surface-2"
@@ -286,8 +291,14 @@ function PeopleOverview({
                     <Avatar name={fullName(b)} />
                     <span className="min-w-0">
                       <span className="block truncate font-medium">{fullName(b)}</span>
-                      <span className="text-xs text-faint">
-                        {b.dobDay} {MONTH_ABBR[(b.dobMonth ?? 1) - 1]}
+                      <span className="flex items-center gap-1 text-xs text-faint">
+                        {b.kind === "birthday" ? (
+                          <Cake className="size-3.5 text-c2" aria-label="Birthday" />
+                        ) : (
+                          <Gem className="size-3.5 text-c5" aria-label="Wedding anniversary" />
+                        )}
+                        {b.daysAway === 0 ? "Today" : b.daysAway === 1 ? "Tomorrow" : `${b.day} ${MONTH_ABBR[b.month - 1]}`}
+                        {b.kind === "anniversary" && (b.years ? ` · ${b.years} ${b.years === 1 ? "year" : "years"} married` : " · Anniversary")}
                       </span>
                     </span>
                   </Link>
@@ -295,7 +306,7 @@ function PeopleOverview({
               ))}
             </ul>
           ) : (
-            <p className="text-[13px] text-muted">No birthdays this week.</p>
+            <p className="text-[13px] text-muted">No birthdays or anniversaries this week.</p>
           )}
         </CardBody>
       </Card>

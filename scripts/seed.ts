@@ -270,6 +270,15 @@ async function main() {
       const last = pick(LAST);
       const near = i < 6; // a few birthdays this week so the dashboard has something to show
       const bday = near ? new Date(today.getTime() + (i % 6) * 86400000) : null;
+      const status = pick(["single", "married", "married", "single", "widowed"] as const);
+      const married = i >= 6 && i < 10 ? "married" : status;
+      // a few wedding anniversaries this week too
+      const wed =
+        i >= 6 && i < 10
+          ? new Date(Date.UTC(1995 + i * 2, today.getMonth(), today.getDate() + (i - 5)))
+          : married === "married" && rand() < 0.7
+            ? new Date(Date.UTC(1988 + Math.floor(rand() * 34), Math.floor(rand() * 12), 1 + Math.floor(rand() * 28)))
+            : null;
       const m = await createMember(
         tx,
         ctx,
@@ -284,7 +293,8 @@ async function main() {
           dobDay: bday ? bday.getDate() : 1 + Math.floor(rand() * 28),
           dobMonth: bday ? bday.getMonth() + 1 : 1 + Math.floor(rand() * 12),
           dobYear: rand() < 0.7 ? 1965 + Math.floor(rand() * 40) : null,
-          maritalStatus: pick(["single", "married", "married", "single", "widowed"] as const),
+          maritalStatus: married,
+          anniversary: wed ? wed.toISOString().slice(0, 10) : undefined,
           area: pick(AREAS),
           occupation: pick(JOBS),
           stage,
@@ -1104,7 +1114,30 @@ async function topUpDemo(ownerId: string) {
   await seedTestAccounts(m.orgId, { onlyMissing: true });
   const added = TEST_ACCOUNTS.filter((a) => !before.some((b) => b.email === a.email));
   if (added.some((a) => a.role === "counsellor")) await seedCounselling(m.orgId, ownerId);
+  await seedAnniversaries(m.orgId);
   if (added.length) console.log(`Added demo accounts: ${added.map((a) => a.email).join(", ")} (password ${DEMO.password})`);
+}
+
+/** Demo data made before anniversaries showed on the dashboard has none; give married members some. */
+async function seedAnniversaries(orgId: string) {
+  await withOrg(orgId, async (tx) => {
+    const [has] = await tx.select({ id: members.id }).from(members).where(sql`${members.anniversary} is not null`).limit(1);
+    if (has) return;
+    const married = await tx
+      .select({ id: members.id })
+      .from(members)
+      .where(and(eq(members.maritalStatus, "married"), sql`${members.deletedAt} is null`, eq(members.status, "active")))
+      .orderBy(members.memberNo);
+    const today = new Date();
+    for (const [i, row] of married.entries()) {
+      const d =
+        i < 4
+          ? new Date(Date.UTC(1995 + i * 4, today.getMonth(), today.getDate() + i + 1))
+          : new Date(Date.UTC(1988 + ((i * 7) % 34), (i * 5) % 12, 1 + ((i * 11) % 28)));
+      await tx.update(members).set({ anniversary: d.toISOString().slice(0, 10) }).where(eq(members.id, row.id));
+    }
+    if (married.length) console.log(`Added wedding anniversaries for ${married.length} married members`);
+  });
 }
 
 async function seedTestAccounts(orgId: string, opts: { onlyMissing?: boolean } = {}) {

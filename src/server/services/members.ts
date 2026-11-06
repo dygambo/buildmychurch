@@ -112,6 +112,7 @@ export type MemberFilters = {
   tagId?: string;
   gender?: string;
   birthdays?: "week" | "month";
+  anniversaries?: "week" | "month";
   page?: number;
   pageSize?: number;
 };
@@ -155,17 +156,34 @@ function filterSql(ctx: Actor, f: MemberFilters): SQL | undefined {
         sql`(select ${memberTags.memberId} from ${memberTags} where ${memberTags.tagId} = ${f.tagId})`,
       ),
     );
-  if (f.birthdays) where.push(birthdaySql(f.birthdays));
+  if (f.birthdays) where.push(upcomingSql(BDAY, f.birthdays));
+  if (f.anniversaries) where.push(upcomingSql(ANNIV, f.anniversaries));
   return and(...where);
 }
 
-/** Birthdays in the next 7 days, or in the current month (Lagos time). Handles the year boundary. */
-function birthdaySql(range: "week" | "month"): SQL {
-  if (range === "month") return sql`${members.dobMonth} = extract(month from (now() at time zone 'Africa/Lagos'))::int`;
-  return sql`${members.dobMonth} is not null and exists (
-    select 1 from generate_series(0, 6) as g(d)
-    where extract(month from ((now() at time zone 'Africa/Lagos')::date + g.d))::int = ${members.dobMonth}
-      and extract(day from ((now() at time zone 'Africa/Lagos')::date + g.d))::int = ${members.dobDay})`;
+type DayOfYear = { month: SQL; day: SQL };
+const BDAY: DayOfYear = { month: sql`${members.dobMonth}`, day: sql`${members.dobDay}` };
+const ANNIV: DayOfYear = {
+  month: sql`extract(month from ${members.anniversary})::int`,
+  day: sql`extract(day from ${members.anniversary})::int`,
+};
+const LAGOS_TODAY = sql`(now() at time zone 'Africa/Lagos')::date`;
+
+/** Dates that fall in the next 7 days, or in the current month (Lagos time). Handles the year boundary. */
+function upcomingSql(d: DayOfYear, range: "week" | "month"): SQL {
+  if (range === "month") return sql`${d.month} = extract(month from ${LAGOS_TODAY})::int`;
+  return sql`${d.month} is not null and ${daysAwaySql(d)} is not null`;
+}
+
+/** How many days until the date comes round again, within the next week (null if later). */
+function daysAwaySql(d: DayOfYear): SQL<number | null> {
+  return sql<number | null>`(select min(g.d) from generate_series(0, 6) as g(d)
+    where extract(month from (${LAGOS_TODAY} + g.d))::int = ${d.month}
+      and extract(day from (${LAGOS_TODAY} + g.d))::int = ${d.day})`;
+}
+
+function upcomingOrder(d: DayOfYear, range: "week" | "month"): SQL[] {
+  return range === "week" ? [sql`${daysAwaySql(d)} asc`] : [sql`${d.day} asc`];
 }
 
 export async function listMembers(tx: Tx, ctx: Actor, f: MemberFilters) {
@@ -187,6 +205,7 @@ export async function listMembers(tx: Tx, ctx: Actor, f: MemberFilters) {
       phoneEnc: members.phoneEnc,
       dobDay: members.dobDay,
       dobMonth: members.dobMonth,
+      anniversary: members.anniversary,
       joinDate: members.joinDate,
       branchName: branches.name,
       branchId: members.branchId,
@@ -195,7 +214,13 @@ export async function listMembers(tx: Tx, ctx: Actor, f: MemberFilters) {
     .innerJoin(branches, eq(branches.id, members.branchId))
     .where(where)
     .orderBy(
-      ...(f.birthdays ? [asc(members.dobMonth), asc(members.dobDay)] : [asc(members.lastName), asc(members.firstName)]),
+      ...(f.birthdays
+        ? upcomingOrder(BDAY, f.birthdays)
+        : f.anniversaries
+          ? upcomingOrder(ANNIV, f.anniversaries)
+          : []),
+      asc(members.lastName),
+      asc(members.firstName),
     )
     .limit(pageSize)
     .offset((page - 1) * pageSize);
@@ -782,6 +807,7 @@ export async function exportRows(tx: Tx, ctx: Actor, f: MemberFilters) {
     Stage: m.stage,
     Status: m.status,
     "Marital status": m.maritalStatus ?? "",
+    "Wedding anniversary": m.anniversary ? String(m.anniversary) : "",
     Occupation: m.occupation ?? "",
     "Joined on": m.joinDate,
     "SMS consent": m.consentMessaging && !m.dnd ? "yes" : "no",
@@ -818,19 +844,29 @@ export async function memberStats(tx: Tx, ctx: Actor) {
     .from(members)
     .where(and(scope, eq(members.status, "active")))
     .groupBy(members.stage);
-  const birthdays = await tx
+  const person = { id: members.id, title: members.title, firstName: members.firstName, lastName: members.lastName };
+  const active = and(scope, eq(members.status, "active"));
+  const bdays = await tx
+    .select({ ...person, month: members.dobMonth, day: members.dobDay, daysAway: daysAwaySql(BDAY) })
+    .from(members)
+    .where(and(active, upcomingSql(BDAY, "week")));
+  const annivs = await tx
     .select({
-      id: members.id,
-      title: members.title,
-      firstName: members.firstName,
-      lastName: members.lastName,
-      dobDay: members.dobDay,
-      dobMonth: members.dobMonth,
+      ...person,
+      month: ANNIV.month,
+      day: ANNIV.day,
+      daysAway: daysAwaySql(ANNIV),
+      years: sql<number>`(extract(year from ${LAGOS_TODAY} + ${daysAwaySql(ANNIV)}) - extract(year from ${members.anniversary}))::int`,
     })
     .from(members)
-    .where(and(scope, eq(members.status, "active"), birthdaySql("week")))
-    .orderBy(asc(members.dobMonth), asc(members.dobDay))
-    .limit(8);
+    .where(and(active, upcomingSql(ANNIV, "week")));
+  const celebrations = [
+    ...bdays.map((b) => ({ ...b, kind: "birthday" as const, years: null })),
+    ...annivs.map((a) => ({ ...a, kind: "anniversary" as const, years: a.years > 0 ? Number(a.years) : null })),
+  ]
+    .map((c) => ({ ...c, month: Number(c.month), day: Number(c.day), daysAway: Number(c.daysAway) }))
+    .sort((x, y) => x.daysAway - y.daysAway || x.firstName.localeCompare(y.firstName))
+    .slice(0, 12);
   // fill in empty months so the chart has a continuous axis
   const months: { month: string; n: number }[] = [];
   const now = new Date();
@@ -850,6 +886,6 @@ export async function memberStats(tx: Tx, ctx: Actor) {
     female: Number(t.female),
     growth: months,
     stages: Object.fromEntries(stages.map((s) => [s.stage, Number(s.n)])) as Record<string, number>,
-    birthdays,
+    celebrations,
   };
 }
