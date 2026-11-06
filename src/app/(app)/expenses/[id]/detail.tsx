@@ -240,6 +240,7 @@ export function ExpenseDetail({
         categories={categories}
         funds={funds}
         thresholdKobo={e.thresholdKobo}
+        approvers={e.approvers}
       />
       <RejectDialog id={e.id} open={dialog === "reject"} onClose={() => setDialog(null)} />
       <PayDialog e={e} open={dialog === "pay"} onClose={() => setDialog(null)} />

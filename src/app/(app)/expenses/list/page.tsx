@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { requireCtx } from "@/server/auth/context";
 import { withOrg } from "@/server/db";
-import { financeSettings, listCategories, listExpenses, type ExpenseFilters } from "@/server/services/expenses";
+import { expenseApprovers, financeSettings, listCategories, listExpenses, type ExpenseFilters } from "@/server/services/expenses";
 import { listFunds } from "@/server/services/giving";
 import { listBranches } from "@/server/services/org";
 import { ExpensesView } from "./view";
@@ -30,6 +30,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: SP 
     funds: await listFunds(tx),
     branches: (await listBranches(tx)).filter((b) => !ctx.branchIds.length || ctx.branchIds.includes(b.id)),
     settings: await financeSettings(tx, ctx.org.id),
+    approvers: await expenseApprovers(tx, ctx.org.id),
   }));
   return (
     <ExpensesView
@@ -41,6 +42,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: SP 
       funds={data.funds.map((f) => ({ id: f.id, name: f.name, restricted: f.restricted }))}
       branches={data.branches.map((b) => ({ id: b.id, name: b.name }))}
       thresholdKobo={data.settings.approvalThresholdKobo}
+      approvers={data.approvers}
       canApprove={ctx.can("finance.approve")}
     />
   );

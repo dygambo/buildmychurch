@@ -38,6 +38,8 @@ export async function renderCertificate(d: {
   weddingDate: string | null;
   sessions: number;
   counsellors: string[];
+  /** Who signs: the name the church gave its lead pastor role. */
+  signatory: string;
   logo: Buffer | null;
   accent: string;
 }) {
@@ -72,7 +74,7 @@ export async function renderCertificate(d: {
               </View>
               <View style={s.sign}>
                 <Text> </Text>
-                <Text style={s.signLabel}>Senior Pastor</Text>
+                <Text style={s.signLabel}>{safe(d.signatory)}</Text>
               </View>
             </View>
           </View>

@@ -33,6 +33,7 @@ export function ExpenseDialog({
   categories,
   funds,
   thresholdKobo,
+  approvers,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -41,6 +42,8 @@ export function ExpenseDialog({
   categories: Option[];
   funds: (Option & { restricted: boolean })[];
   thresholdKobo: number;
+  /** Who can approve, e.g. "Senior Pastor or Super Admin". */
+  approvers: string;
 }) {
   const router = useRouter();
   const save = useAction(saveExpenseAction, {
@@ -63,7 +66,7 @@ export function ExpenseDialog({
           title={initial?.id ? "Edit expense" : "Record an expense"}
           description={
             thresholdKobo > 0
-              ? `Up to ${naira(thresholdKobo)} approves itself when submitted. Anything more needs a pastor to approve.`
+              ? `Up to ${naira(thresholdKobo)} approves itself when submitted. Anything more needs the ${approvers} to approve.`
               : "Every expense needs someone other than you to approve it."
           }
           footer={

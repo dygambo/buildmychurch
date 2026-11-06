@@ -935,8 +935,8 @@ async function seedMemos(orgId: string, ownerId: string) {
     await saveMemoRoute(tx, owner, {
       prefix: "GAL",
       steps: [
-        { label: "Church Secretary", roleKey: "admin", minAmount: 0 },
-        { label: "Senior Pastor", roleKey: "owner", minAmount: 5_000_000 },
+        { label: "Church Secretary", roleKey: "admin", minSource: "amount", minAmount: 0 },
+        { label: "Senior Pastor", roleKey: "owner", minSource: "finance_limit", minAmount: 0 },
       ],
     });
     const [hq] = await tx.select().from(branches).orderBy(asc(branches.createdAt)).limit(1);

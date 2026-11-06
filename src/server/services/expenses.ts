@@ -25,7 +25,7 @@ import { AppError, forbidden, notFound } from "../errors";
 import { enqueue } from "../jobs/queue";
 import { emailLayout, p } from "../emails/layout";
 import { env } from "../env";
-import { formatDate, naira, todayISO } from "@/lib/format";
+import { formatDate, naira, orList, todayISO } from "@/lib/format";
 import { assertBranch, branchScope } from "./scope";
 
 /* ================= shared ================= */
@@ -130,6 +130,16 @@ export async function financeSettings(tx: Tx, orgId: string): Promise<FinanceSet
     openingBalances: f.openingBalances ?? {},
     openingDate: f.openingDate ?? null,
   };
+}
+
+/** Names of the roles that can approve expenses, for copy like "needs the Senior Pastor or Super Admin". */
+export async function expenseApprovers(tx: Tx, orgId: string): Promise<string> {
+  // roles aren't under row-level security (sign-in reads them), so always filter by church
+  const rows = await tx.select({ name: roles.name, perms: roles.permissions }).from(roles).where(eq(roles.orgId, orgId)).orderBy(asc(roles.name));
+  return orList(
+    rows.filter((r) => (r.perms as string[]).includes("finance.approve")).map((r) => r.name),
+    "Super Admin",
+  );
 }
 
 export const financeSettingsSchema = z.object({
@@ -726,6 +736,7 @@ export async function getExpense(tx: Tx, ctx: Actor, id: string) {
     fundBalanceKobo: fundBalance?.balance ?? null,
     voidedByName: voider?.name ?? null,
     thresholdKobo: s.approvalThresholdKobo,
+    approvers: await expenseApprovers(tx, ctx.org.id),
     isRequester,
     canEdit: isRequester && (r.e.status === "draft" || r.e.status === "rejected"),
     canApprove: ctx.can("finance.approve") && r.e.status === "submitted" && !isRequester,

@@ -19,10 +19,12 @@ type Cat = { id: string; name: string; code: string; description: string | null;
 
 export function FinanceSettingsView({
   settings,
+  approvers,
   categories,
   funds,
 }: {
   settings: FinanceSettings;
+  approvers: string;
   categories: Cat[];
   funds: { id: string; name: string; restricted: boolean }[];
 }) {
@@ -54,7 +56,7 @@ export function FinanceSettingsView({
                 label="Expenses approve themselves up to (₦)"
                 htmlFor="fs-th"
                 error={rules.fieldErrors.approvalThreshold}
-                hint="Anything above needs a pastor or Super Admin who didn't raise it. Enter 0 to approve every expense by hand."
+                hint={`Anything above needs the ${approvers}, and not the person who raised it. Memo approval steps set to follow this limit change with it. Enter 0 to approve every expense by hand.`}
               >
                 <Input id="fs-th" name="approvalThreshold" inputMode="decimal" className="tabular" defaultValue={String(settings.approvalThresholdKobo / 100)} />
               </Field>

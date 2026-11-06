@@ -21,7 +21,8 @@ export const memoTemplates = pgTable("memo_templates", {
 
 /**
  * The approval path. Each step is a role (or one person). A step with a minimum amount only applies to memos
- * asking for at least that much: ₦50,000 might need the administrator; ₦500,000 also the senior pastor.
+ * asking for at least that much. A step can instead follow the finance approval limit (`min_source =
+ * 'finance_limit'`), so it applies to memos above the amount expenses can approve themselves for.
  */
 export const memoRouteSteps = pgTable("memo_route_steps", {
   id: id(),
@@ -31,6 +32,7 @@ export const memoRouteSteps = pgTable("memo_route_steps", {
   roleKey: text("role_key"),
   userId: uuid("user_id"),
   minAmountKobo: kobo("min_amount_kobo").notNull().default(0),
+  minSource: text("min_source", { enum: ["amount", "finance_limit"] }).notNull().default("amount"),
   createdAt: createdAt(),
 });
 

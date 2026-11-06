@@ -46,6 +46,7 @@ async function setup() {
 describe("marriage counselling", () => {
   it("runs pre-marital counselling from opening to a certificate, keeping notes private", async () => {
     const { c, bride, counsellor, other } = await setup();
+    await newChurch("Another Church"); // a second church's roles must not leak into this one's certificate
     const id = await withOrg(c.orgId, (tx) =>
       saveCase(
         tx,
@@ -97,6 +98,7 @@ describe("marriage counselling", () => {
     expect(done.sessions.find((s) => s.id === s1)!.status).toBe("cancelled");
 
     const data = await withOrg(c.orgId, (tx) => certificateData(tx, c.ctx, id));
+    expect(data.signatory).toBe("Senior Pastor");
     const pdf = await renderCertificate({ ...data, logo: null, accent: "#2357e8" });
     expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
   });

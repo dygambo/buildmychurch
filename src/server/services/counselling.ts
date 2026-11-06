@@ -773,6 +773,8 @@ export async function certificateData(tx: Tx, ctx: Actor, id: string) {
   const [o] = await tx.select({ name: organisations.name, address: organisations.address }).from(organisations).where(eq(organisations.id, ctx.org.id));
   const held = await tx.select({ n: sql<number>`count(*)::int` }).from(counsellingSessions).where(and(eq(counsellingSessions.caseId, c.id), eq(counsellingSessions.status, "held")));
   const team = await counsellors(tx, ctx.org.id);
+  // signed by the church's lead pastor, under whatever name the church gave that role
+  const [lead] = await tx.select({ name: roles.name }).from(roles).where(and(eq(roles.orgId, ctx.org.id), eq(roles.key, "pastor")));
   await audit(tx, ctx, { action: "counselling.certificate", summary: `Printed certificate ${c.certificateNo}`, entityType: "counselling", entityId: c.id });
   return {
     church: o!.name,
@@ -784,5 +786,6 @@ export async function certificateData(tx: Tx, ctx: Actor, id: string) {
     weddingDate: c.weddingDate,
     sessions: held[0]?.n ?? 0,
     counsellors: c.counsellorIds.map((i) => team.find((t) => t.id === i)?.name).filter(Boolean) as string[],
+    signatory: lead?.name ?? "Senior Pastor",
   };
 }

@@ -29,6 +29,8 @@ import { enqueue } from "../jobs/queue";
 import { emailLayout, p } from "../emails/layout";
 import { env } from "../env";
 import { formatDate, naira, todayISO } from "@/lib/format";
+import { ruleApplies, ruleText, STEP_SOURCES, stepRule } from "@/lib/approval";
+import { financeSettings } from "./expenses";
 import { memoVisibleTo } from "./memo-access";
 import { assertBranch } from "./scope";
 
@@ -85,7 +87,8 @@ export async function createMemoDefaults(tx: Tx, orgId: string) {
   await tx.insert(memoTemplates).values(STARTER_TEMPLATES.map((t) => ({ ...t, orgId })));
   await tx.insert(memoRouteSteps).values([
     { orgId, position: 1, label: "Church Administrator", roleKey: "admin", minAmountKobo: 0 },
-    { orgId, position: 2, label: "Senior Pastor", roleKey: "pastor", minAmountKobo: 5_000_000 },
+    // follows the finance approval limit, so one setting decides when a pastor must sign off on spending
+    { orgId, position: 2, label: "Senior Pastor", roleKey: "pastor", minAmountKobo: 0, minSource: "finance_limit" as const },
   ]);
 }
 
@@ -245,10 +248,11 @@ async function loadOwn(tx: Tx, ctx: Actor, id: string) {
 /** Builds the approval path for this memo from the church's route, skipping steps it doesn't need. */
 async function buildPath(tx: Tx, ctx: Actor, m: typeof memos.$inferSelect) {
   const route = await tx.select().from(memoRouteSteps).orderBy(asc(memoRouteSteps.position));
+  const { approvalThresholdKobo } = await financeSettings(tx, ctx.org.id);
   const steps: (typeof memoSteps.$inferInsert)[] = [];
   const skipped: string[] = [];
   for (const r of route) {
-    if (r.minAmountKobo > 0 && (m.amountKobo ?? 0) < r.minAmountKobo) continue;
+    if (!ruleApplies(stepRule(r, approvalThresholdKobo), m.amountKobo)) continue;
     const people = (await approversFor(tx, ctx.org.id, r, m.branchId)).filter((x) => x.id !== m.initiatorId);
     if (!people.length) {
       skipped.push(r.label);
@@ -717,10 +721,14 @@ export async function listMemoTemplates(tx: Tx) {
   return tx.select().from(memoTemplates).where(isNull(memoTemplates.archivedAt)).orderBy(asc(memoTemplates.name));
 }
 
-export async function listRoute(tx: Tx) {
-  const steps = await tx.select().from(memoRouteSteps).orderBy(asc(memoRouteSteps.position));
-  const roleRows = await tx.select({ key: roles.key, name: roles.name, perms: roles.permissions }).from(roles);
-  return { steps, roles: roleRows.filter((r) => (r.perms as string[]).includes("memo.approve")).map((r) => ({ key: r.key, name: r.name })) };
+/** The church's memo route, with each step's rule worked out against the current finance approval limit. */
+export async function listRoute(tx: Tx, orgId: string) {
+  const rows = await tx.select().from(memoRouteSteps).orderBy(asc(memoRouteSteps.position));
+  const { approvalThresholdKobo: financeLimitKobo } = await financeSettings(tx, orgId);
+  const steps = rows.map((r) => ({ ...r, rule: stepRule(r, financeLimitKobo) }));
+  // roles aren't under row-level security (sign-in reads them), so always filter by church
+  const roleRows = await tx.select({ key: roles.key, name: roles.name, perms: roles.permissions }).from(roles).where(eq(roles.orgId, orgId));
+  return { steps, financeLimitKobo, roles: roleRows.filter((r) => (r.perms as string[]).includes("memo.approve")).map((r) => ({ key: r.key, name: r.name })) };
 }
 
 export const routeSchema = z.object({
@@ -734,6 +742,7 @@ export const routeSchema = z.object({
       z.object({
         label: z.string().trim().min(2, "Name the step.").max(60),
         roleKey: z.string().min(1, "Choose a role."),
+        minSource: z.enum(STEP_SOURCES).default("amount"),
         minAmount: z
           .union([z.string(), z.number()])
           .optional()
@@ -746,19 +755,34 @@ export const routeSchema = z.object({
 
 export async function saveRoute(tx: Tx, ctx: Actor, input: z.output<typeof routeSchema>) {
   assertCan(ctx, "settings.manage", "change the memo approval route");
-  const known = new Set((await tx.select({ key: roles.key }).from(roles)).map((r) => r.key));
+  const known = new Set((await tx.select({ key: roles.key }).from(roles).where(eq(roles.orgId, ctx.org.id))).map((r) => r.key));
   input.steps.forEach((s, i) => {
     if (!known.has(s.roleKey)) throw new AppError("One of the roles no longer exists.", { [`steps.${i}.roleKey`]: "Choose again." });
   });
   await tx.delete(memoRouteSteps);
-  await tx.insert(memoRouteSteps).values(input.steps.map((s, i) => ({ orgId: ctx.org.id, position: i + 1, label: s.label, roleKey: s.roleKey, minAmountKobo: s.minAmount })));
+  await tx.insert(memoRouteSteps).values(
+    input.steps.map((s, i) => ({
+      orgId: ctx.org.id,
+      position: i + 1,
+      label: s.label,
+      roleKey: s.roleKey,
+      minSource: s.minSource,
+      minAmountKobo: s.minSource === "amount" ? s.minAmount : 0,
+    })),
+  );
+  const { approvalThresholdKobo } = await financeSettings(tx, ctx.org.id);
   await tx
     .update(organisations)
     .set({ settings: sql`jsonb_set(coalesce(${organisations.settings}, '{}'::jsonb), '{memo}', ${JSON.stringify({ prefix: input.prefix })}::jsonb)` })
     .where(eq(organisations.id, ctx.org.id));
   await audit(tx, ctx, {
     action: "memo.route_saved",
-    summary: `Set the memo route: ${input.steps.map((s) => `${s.label}${s.minAmount ? ` (from ${naira(s.minAmount)})` : ""}`).join(" → ")}; references start ${input.prefix}/MEMO`,
+    summary: `Set the memo route: ${input.steps
+      .map((s) => {
+        const when = s.minSource === "finance_limit" ? "above the finance approval limit" : ruleText(stepRule({ minSource: "amount", minAmountKobo: s.minAmount }, approvalThresholdKobo));
+        return `${s.label}${when ? ` (${when})` : ""}`;
+      })
+      .join(" → ")}; references start ${input.prefix}/MEMO`,
     entityType: "organisation",
     entityId: ctx.org.id,
   });

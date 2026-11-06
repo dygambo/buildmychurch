@@ -51,6 +51,7 @@ test("a memo is raised, queried, answered, approved with a stamp, and paid", asy
   await page.getByLabel("Amount requested (₦)").fill("30000");
   await expect(page.getByTestId("memo-path")).toContainText("Church Administrator");
   await expect(page.getByTestId("memo-path")).not.toContainText("Senior Pastor");
+  await expect(page.getByTestId("memo-later-steps")).toHaveText("Senior Pastor also approves above ₦50,000.");
   await page.getByRole("button", { name: "Send for approval" }).click();
   await expect(page).toHaveURL(/\/memos\/[0-9a-f-]{36}/);
   const memoUrl = new URL(page.url()).pathname;
@@ -96,4 +97,27 @@ test("a memo is raised, queried, answered, approved with a stamp, and paid", asy
   expect(pdf.headers()["content-type"]).toBe("application/pdf");
   await page.goto("/expenses/list?status=paid");
   await expect(page.getByText("Youth Week publicity").first()).toBeVisible();
+});
+
+test("changing the finance approval limit changes when the pastor approves memos", async ({ page }) => {
+  await page.goto("/sign-up");
+  await page.getByLabel("Church name").fill(`Limit Chapel ${stamp}`);
+  await page.getByLabel("Your full name").fill("Pastor Limit Test");
+  await page.getByLabel("Email").fill(`limit.${owner}`);
+  await page.getByLabel("Password").fill("Memo-Route-Approve-26");
+  await page.getByLabel(/I agree/).check();
+  await page.getByRole("button", { name: "Create church account" }).click();
+  await expect(page).toHaveURL(/\/dashboard/);
+
+  await page.goto("/expenses/settings");
+  await page.getByLabel("Expenses approve themselves up to (₦)").fill("80000");
+  await page.getByRole("button", { name: "Save", exact: true }).first().click();
+  await expect(page.getByText(/Saved|saved/).first()).toBeVisible();
+
+  await page.goto("/memos/new");
+  await expect(page.getByTestId("memo-later-steps")).toHaveText("Senior Pastor also approves above ₦80,000.");
+
+  await page.goto("/memos/settings");
+  await expect(page.getByLabel("Applies to").nth(1)).toHaveValue("finance_limit");
+  await expect(page.getByLabel("Applies to").nth(1).locator("option:checked")).toHaveText("Above the finance approval limit (₦80,000)");
 });

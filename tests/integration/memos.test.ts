@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { withOrg } from "@/server/db";
 import { branches, expenses, jobs, memoSteps, memos } from "@/server/db/schema";
-import { listCategories } from "@/server/services/expenses";
+import { expenseApprovers, financeSettingsSchema, listCategories, saveApprovalRules } from "@/server/services/expenses";
 import {
   answerQuery,
   approveMemo,
@@ -12,7 +12,10 @@ import {
   disburseSchema,
   getMemo,
   listMemos,
+  listRoute,
   memoSchema,
+  routeSchema,
+  saveRoute,
   queryMemo,
   saveMemo,
   submitMemo,
@@ -87,6 +90,32 @@ describe("E-Memo", () => {
     // a decided memo is a record
     await expectDbError(withOrg(s.c.orgId, (tx) => tx.update(memos).set({ amountKobo: 1 }).where(eq(memos.id, big.id))), /Decided memos cannot be changed/);
     await expectDbError(withOrg(s.c.orgId, (tx) => tx.update(memoSteps).set({ actedBy: null }).where(eq(memoSteps.memoId, big.id))), /cannot be changed/);
+  });
+
+  it("a step can follow the finance approval limit, so changing that limit changes who approves memos", async () => {
+    const s = await setup();
+    await newChurch("Another Church Entirely"); // its roles must never show up here
+    const route = await withOrg(s.c.orgId, (tx) => listRoute(tx, s.c.orgId));
+    expect(new Set(route.roles.map((r) => r.key)).size).toBe(route.roles.length);
+    expect(route.steps.map((x) => [x.label, x.rule])).toEqual([
+      ["Church Administrator", { kind: "always" }],
+      ["Senior Pastor", { kind: "above", kobo: 5_000_000 }],
+    ]);
+    // raise the expense limit to ₦100,000: a ₦75,000 memo no longer needs the pastor
+    await withOrg(s.c.orgId, (tx) => saveApprovalRules(tx, s.c.ctx, financeSettingsSchema.parse({ approvalThreshold: "100000", remittancePercent: "10", remittanceBasis: "unrestricted" })));
+    expect((await withOrg(s.c.orgId, (tx) => listRoute(tx, s.c.orgId))).steps[1]!.rule).toEqual({ kind: "above", kobo: 10_000_000 });
+    const mid = memo(s, { amount: "75000" });
+    await withOrg(s.c.orgId, (tx) => saveMemo(tx, s.hod.ctx, mid));
+    await withOrg(s.c.orgId, (tx) => submitMemo(tx, s.hod.ctx, mid.id));
+    expect((await withOrg(s.c.orgId, (tx) => tx.select().from(memoSteps).where(eq(memoSteps.memoId, mid.id)))).map((x) => x.label)).toEqual(["Church Administrator"]);
+
+    // a fixed amount still works, and is kept apart from the finance limit
+    await withOrg(s.c.orgId, (tx) =>
+      saveRoute(tx, s.c.ctx, routeSchema.parse({ prefix: "RGC", steps: [{ label: "Church Administrator", roleKey: "admin" }, { label: "Senior Pastor", roleKey: "pastor", minSource: "amount", minAmount: "60000" }] })),
+    );
+    expect((await withOrg(s.c.orgId, (tx) => listRoute(tx, s.c.orgId))).steps[1]!.rule).toEqual({ kind: "from", kobo: 6_000_000 });
+    // copy names the roles that can approve expenses rather than assuming "a pastor"
+    expect(await withOrg(s.c.orgId, (tx) => expenseApprovers(tx, s.c.orgId))).toBe("Senior Pastor or Super Admin");
   });
 
   it("queries go back to the initiator and return to the same step", async () => {

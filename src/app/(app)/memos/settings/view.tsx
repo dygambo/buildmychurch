@@ -10,12 +10,27 @@ import { Checkbox, Field, Input, Select, Textarea } from "@/components/ui/input"
 import { PageHeader } from "@/components/ui/page-header";
 import { useAction } from "@/components/ui/use-action";
 import { archiveMemoTemplateAction, saveMemoTemplateAction, saveRouteAction } from "../actions";
+import { naira } from "@/lib/format";
 import { CATEGORY } from "../labels";
 
-type Step = { label: string; roleKey: string; minAmount: string };
+type Step = { label: string; roleKey: string; when: "always" | "amount" | "finance_limit"; minAmount: string };
 type T = { id: string; name: string; category: string; subject: string; body: string; needsAmount: boolean };
 
-export function MemoSettingsView({ prefix: p0, steps: s0, roles, templates }: { prefix: string; steps: Step[]; roles: { key: string; name: string }[]; templates: T[] }) {
+export function MemoSettingsView({
+  prefix: p0,
+  steps: s0,
+  roles,
+  templates,
+  financeLimitKobo,
+  canSeeFinance,
+}: {
+  prefix: string;
+  steps: Step[];
+  roles: { key: string; name: string }[];
+  templates: T[];
+  financeLimitKobo: number;
+  canSeeFinance: boolean;
+}) {
   const router = useRouter();
   const [prefix, setPrefix] = useState(p0);
   const [steps, setSteps] = useState<Step[]>(s0);
@@ -48,7 +63,7 @@ export function MemoSettingsView({ prefix: p0, steps: s0, roles, templates }: { 
           </Field>
           <ol className="flex flex-col gap-2">
             {steps.map((s, i) => (
-              <li key={i} className="grid grid-cols-[24px_minmax(0,1.2fr)_minmax(0,1fr)_140px_auto] items-end gap-2 rounded-lg border border-line p-2.5 max-md:grid-cols-2">
+              <li key={i} className="grid grid-cols-[24px_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1.3fr)_auto] items-end gap-2 rounded-lg border border-line p-2.5 max-md:grid-cols-2">
                 <span className="mb-2 text-center text-xs font-semibold text-muted max-md:col-span-2 max-md:text-left">Step {i + 1}</span>
                 <Field label="Name" htmlFor={`st-l-${i}`} error={save.fieldErrors[`steps.${i}.label`]}>
                   <Input id={`st-l-${i}`} value={s.label} onChange={(e) => set(i, { label: e.target.value })} />
@@ -63,9 +78,20 @@ export function MemoSettingsView({ prefix: p0, steps: s0, roles, templates }: { 
                     ))}
                   </Select>
                 </Field>
-                <Field label="Only from (₦)" htmlFor={`st-m-${i}`} optional>
-                  <Input id={`st-m-${i}`} inputMode="decimal" value={s.minAmount} onChange={(e) => set(i, { minAmount: e.target.value })} placeholder="Every memo" />
-                </Field>
+                <div className="flex items-end gap-2">
+                  <Field label="Applies to" htmlFor={`st-w-${i}`} className="min-w-0 flex-1">
+                    <Select id={`st-w-${i}`} value={s.when} onChange={(e) => set(i, { when: e.target.value as Step["when"] })}>
+                      <option value="always">Every memo</option>
+                      <option value="finance_limit">Above the finance approval limit ({naira(financeLimitKobo)})</option>
+                      <option value="amount">From an amount I set</option>
+                    </Select>
+                  </Field>
+                  {s.when === "amount" && (
+                    <Field label="From (₦)" htmlFor={`st-m-${i}`} className="w-28" error={save.fieldErrors[`steps.${i}.minAmount`]}>
+                      <Input id={`st-m-${i}`} inputMode="decimal" value={s.minAmount} onChange={(e) => set(i, { minAmount: e.target.value })} />
+                    </Field>
+                  )}
+                </div>
                 <div className="flex">
                   <Button size="icon-sm" variant="ghost" aria-label={`Move step ${i + 1} up`} disabled={i === 0} onClick={() => move(i, i - 1)}>
                     <ArrowUp />
@@ -81,13 +107,34 @@ export function MemoSettingsView({ prefix: p0, steps: s0, roles, templates }: { 
             ))}
           </ol>
           <Note>
-            Steps with an amount only apply to memos asking for at least that much. If no one holds a step&apos;s role (or only the person who raised the memo), the step is skipped. Nobody approves their own memo.
+            Steps with an amount only apply to memos asking for that much. The finance approval limit is the amount expenses can approve themselves for
+            {canSeeFinance ? (
+              <>
+                {" "}
+                (change it in{" "}
+                <Link href="/expenses/settings" className="text-accent hover:underline">
+                  finance settings
+                </Link>
+                )
+              </>
+            ) : null}
+            ; steps that follow it change when it does. If no one holds a step&apos;s role (or only the person who raised the memo), the step is skipped. Nobody approves their own memo.
           </Note>
           <div className="flex gap-2">
-            <Button onClick={() => setSteps((l) => [...l, { label: "", roleKey: "", minAmount: "" }])} disabled={steps.length >= 8}>
+            <Button onClick={() => setSteps((l) => [...l, { label: "", roleKey: "", when: "always", minAmount: "" }])} disabled={steps.length >= 8}>
               <Plus /> Add step
             </Button>
-            <Button variant="primary" className="ml-auto" loading={save.pending} onClick={() => save.run({ prefix, steps })}>
+            <Button variant="primary" className="ml-auto" loading={save.pending} onClick={() =>
+                save.run({
+                  prefix,
+                  steps: steps.map((s) => ({
+                    label: s.label,
+                    roleKey: s.roleKey,
+                    minSource: s.when === "finance_limit" ? ("finance_limit" as const) : ("amount" as const),
+                    minAmount: s.when === "amount" ? s.minAmount : "0",
+                  })),
+                })
+              }>
               <Save /> Save route
             </Button>
           </div>

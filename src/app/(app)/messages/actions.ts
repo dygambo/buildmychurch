@@ -1,4 +1,5 @@
 "use server";
+import { hourLabel, RUN_TIMES } from "@/lib/run-times";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { orgAction } from "@/server/action";
@@ -71,7 +72,7 @@ export const archiveTemplateAction = orgAction({ perm: "messaging.manage", schem
 export const saveAutomationAction = orgAction({ perm: "messaging.manage", schema: automationSchema }, async (input, ctx, tx) => {
   await saveAutomation(tx, ctx, input);
   revalidatePath("/messages/automations");
-  return { data: null, message: input.enabled ? "On. It runs every morning at 7am." : "Turned off" };
+  return { data: null, message: input.enabled ? `On. It runs every morning at ${hourLabel(RUN_TIMES.automations.hour)}.` : "Turned off" };
 });
 
 export const topupAction = orgAction({ perm: "messaging.manage", schema: topupSchema }, async (input, ctx, tx) => {

@@ -1,4 +1,5 @@
 "use client";
+import { ruleApplies, ruleText, type StepRule } from "@/lib/approval";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -8,7 +9,6 @@ import { Card, CardBody, CardHeader, Note } from "@/components/ui/card";
 import { Checkbox, Field, Input, Select, Textarea } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
 import { useAction } from "@/components/ui/use-action";
-import { naira } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { MemberPicker } from "../../members/member-picker";
 import { saveMemoAction } from "../actions";
@@ -41,7 +41,7 @@ export function MemoForm({
 }: {
   initial: Initial;
   templates: T[];
-  route: { label: string; minAmountKobo: number }[];
+  route: { label: string; rule: StepRule }[];
   groups: { id: string; name: string }[];
   branches: { id: string; name: string }[];
   canPickMember: boolean;
@@ -63,7 +63,8 @@ export function MemoForm({
   const query = initial.status === "query";
   const tpl = templates.find((t) => t.id === templateId);
   const kobo = Math.round(Number(amount.replace(/[₦,\s]/g, "")) * 100) || 0;
-  const path = useMemo(() => route.filter((r) => !r.minAmountKobo || kobo >= r.minAmountKobo), [route, kobo]);
+  const path = useMemo(() => route.filter((r) => ruleApplies(r.rule, kobo)), [route, kobo]);
+  const later = route.filter((r) => !ruleApplies(r.rule, kobo));
 
   useEffect(() => {
     const before = (e: BeforeUnloadEvent) => {
@@ -241,13 +242,9 @@ export function MemoForm({
                   </li>
                 )}
               </ol>
-              {route.some((r) => r.minAmountKobo > 0 && kobo < r.minAmountKobo) && (
-                <p className="text-xs text-muted">
-                  {route
-                    .filter((r) => r.minAmountKobo > 0 && kobo < r.minAmountKobo)
-                    .map((r) => `${r.label} also approves from ${naira(r.minAmountKobo)}`)
-                    .join(". ")}
-                  .
+              {later.length > 0 && (
+                <p className="text-xs text-muted" data-testid="memo-later-steps">
+                  {later.map((r) => `${r.label} also approves ${ruleText(r.rule)}`).join(". ")}.
                 </p>
               )}
               {confidential && (

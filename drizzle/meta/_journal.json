@@ -176,6 +176,13 @@
       "when": 1792620972681,
       "tag": "0024_counsellor_role",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793963048722,
+      "tag": "0025_memo_step_finance_limit",
+      "breakpoints": true
     }
   ]
 }

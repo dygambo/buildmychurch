@@ -28,7 +28,7 @@ export default async function NewMemoPage({ searchParams }: { searchParams: Prom
     return {
       existing,
       templates: await listMemoTemplates(tx),
-      route: (await listRoute(tx)).steps,
+      route: (await listRoute(tx, ctx.org.id)).steps,
       groups: (await listGroups(tx, ctx)).filter((g) => g.kind !== "cell"),
       branches: (await listBranches(tx)).filter((b) => !ctx.branchIds.length || ctx.branchIds.includes(b.id)),
     };
@@ -56,7 +56,7 @@ export default async function NewMemoPage({ searchParams }: { searchParams: Prom
           : { id: randomUUID(), branchId: data.branches[0]?.id ?? "", templateId: sp.template ?? null, status: "draft" }
       }
       templates={data.templates.map((t) => ({ id: t.id, name: t.name, category: t.category, subject: t.subject, body: t.body, needsAmount: t.needsAmount }))}
-      route={data.route.map((r) => ({ label: r.label, minAmountKobo: r.minAmountKobo }))}
+      route={data.route.map((r) => ({ label: r.label, rule: r.rule }))}
       groups={data.groups.map((g) => ({ id: g.id, name: g.name }))}
       branches={data.branches.map((b) => ({ id: b.id, name: b.name }))}
       canPickMember={ctx.can("members.read")}

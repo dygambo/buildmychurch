@@ -107,3 +107,10 @@ export const initials = (name: string) =>
     .slice(0, 2)
     .map((w) => w[0]!.toUpperCase())
     .join("");
+
+/** ["Senior Pastor", "Super Admin"] → "Senior Pastor or Super Admin"; empty → the fallback. */
+export function orList(items: string[], fallback = ""): string {
+  if (!items.length) return fallback;
+  if (items.length === 1) return items[0]!;
+  return `${items.slice(0, -1).join(", ")} or ${items.at(-1)}`;
+}

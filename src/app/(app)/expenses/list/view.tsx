@@ -27,6 +27,7 @@ export function ExpensesView({
   funds,
   branches,
   thresholdKobo,
+  approvers,
   canApprove,
 }: {
   list: { rows: ExpenseRow[]; total: number; sumKobo: number; page: number; pageSize: number };
@@ -37,6 +38,7 @@ export function ExpensesView({
   funds: (Option & { restricted: boolean })[];
   branches: Option[];
   thresholdKobo: number;
+  approvers: string;
   canApprove: boolean;
 }) {
   const router = useRouter();
@@ -245,6 +247,7 @@ export function ExpensesView({
         categories={categories}
         funds={funds}
         thresholdKobo={thresholdKobo}
+        approvers={approvers}
       />
     </>
   );

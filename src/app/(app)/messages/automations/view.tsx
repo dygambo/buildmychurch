@@ -1,4 +1,5 @@
 "use client";
+import { hourLabel, RUN_TIMES } from "@/lib/run-times";
 import { useState } from "react";
 import { Cake, Gift, HandCoins, Heart, Save } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +19,7 @@ export function AutomationsView({ items, church, whatsapp }: { items: Item[]; ch
     <>
       <PageHeader
         title="Automatic messages"
-        description="Sent every morning at 7am to the people they're for. Birthday, anniversary and welcome messages only go to people who agreed to messages."
+        description={`Sent every morning at ${hourLabel(RUN_TIMES.automations.hour)} to the people they're for. Birthday, anniversary and welcome messages only go to people who agreed to messages.`}
       />
       <div className="grid grid-cols-2 gap-4 max-lg:grid-cols-1">
         {items.map((i) => (

@@ -32,7 +32,7 @@ type Data = {
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const compact = (k: number) => naira(k, { compact: Math.abs(k) >= 100_000_000 });
 
-export function AccountsOverview({ data, thisYear, canApprove }: { data: Data; thisYear: number; canApprove: boolean }) {
+export function AccountsOverview({ data, thisYear, canApprove, approvers }: { data: Data; thisYear: number; canApprove: boolean; approvers: string }) {
   const router = useRouter();
   const surplus = data.totals.income - data.totals.spending;
   const lastIdx = data.year === thisYear ? new Date().getMonth() : 11;
@@ -72,7 +72,7 @@ export function AccountsOverview({ data, thisYear, canApprove }: { data: Data; t
             {data.awaitingApproval > 0 && (
               <Link href="/expenses/list?status=submitted" className="font-medium hover:underline">
                 {data.awaitingApproval} expense{data.awaitingApproval === 1 ? "" : "s"} waiting for approval
-                {canApprove ? "" : " by a pastor"}
+                {canApprove ? "" : ` by the ${approvers}`}
               </Link>
             )}
             {data.awaitingPayment > 0 && (
