@@ -16,6 +16,19 @@ const schema = z.object({
   SMS_PROVIDER: z.enum(["log", "termii"]).default("log"),
   TERMII_API_KEY: z.string().optional(),
   TERMII_SENDER_ID: z.string().optional(),
+  TERMII_BASE_URL: z.string().url().default("https://v3.api.termii.com"),
+  TERMII_WEBHOOK_SECRET: z.string().optional(),
+  WHATSAPP_PROVIDER: z.enum(["none", "log", "meta"]).default("none"),
+  WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
+  WHATSAPP_ACCESS_TOKEN: z.string().optional(),
+  WHATSAPP_APP_SECRET: z.string().optional(),
+  WHATSAPP_VERIFY_TOKEN: z.string().optional(),
+  /** Name of the approved WhatsApp template with one body variable ({{1}}) that carries the message. */
+  WHATSAPP_TEMPLATE: z.string().default("church_announcement"),
+  /** What one SMS unit costs a church, in kobo. */
+  SMS_UNIT_PRICE_KOBO: z.coerce.number().int().positive().default(400),
+  /** "fake" runs a built-in checkout page instead of Paystack. Refused in production unless test hooks are on. */
+  PAYMENTS_PROVIDER: z.enum(["fake", "paystack"]).default("fake"),
   PAYSTACK_SECRET_KEY: z.string().optional(),
   PAYSTACK_PUBLIC_KEY: z.string().optional(),
   STORAGE_PROVIDER: z.enum(["local"]).default("local"),

@@ -15,7 +15,7 @@ export default defineConfig({
   ],
   webServer: {
     command: `npm run start -- -p ${PORT}`,
-    env: { E2E_TEST_HOOKS: "1", ALLOW_DEV_MAILBOX: "1" },
+    env: { E2E_TEST_HOOKS: "1", ALLOW_DEV_MAILBOX: "1", APP_URL: `http://localhost:${PORT}` },
     port: PORT,
     reuseExistingServer: true,
     timeout: 120_000,

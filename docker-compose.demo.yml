@@ -1,0 +1,41 @@
+# Try Build My Church on your own computer with one command:
+#   docker compose -f docker-compose.demo.yml up --build
+# then open http://localhost:3000 and sign in with demo@buildmychurch.com / Grace-Assembly-2026.
+# Emails and SMS are not sent: read them at http://localhost:3000/dev/mailbox. Payments use a practice checkout.
+# The keys below are public demo keys. Never use them for a real church.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - demo_pgdata:/var/lib/postgresql/data
+      - ./scripts/setup-db.sql:/docker-entrypoint-initdb.d/01-setup.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d buildmychurch"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports: ["3000:3000"]
+    environment:
+      APP_URL: http://localhost:3000
+      DATABASE_URL: postgres://bmc_app:bmc_app@db:5432/buildmychurch
+      DATABASE_ADMIN_URL: postgres://bmc_owner:bmc_owner@db:5432/buildmychurch
+      ENCRYPTION_KEY: ZGVtby1vbmx5LWVuY3J5cHRpb24ta2V5LTMyLWJ5dGU=
+      BLIND_INDEX_KEY: ZGVtby1vbmx5LWJsaW5kLWluZGV4LWtleS0zMmJ5dGU=
+      SESSION_SECRET: ZGVtby1vbmx5LXNlc3Npb24tc2VjcmV0LTMyLWJ5dGVz
+      EMAIL_PROVIDER: log
+      SMS_PROVIDER: log
+      WHATSAPP_PROVIDER: log
+      PAYMENTS_PROVIDER: fake
+      ALLOW_FAKE_PAYMENTS: "1"
+      ALLOW_DEV_MAILBOX: "1"
+      STORAGE_PROVIDER: local
+      SEED_DEMO: "1"
+volumes:
+  demo_pgdata:

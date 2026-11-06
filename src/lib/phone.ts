@@ -21,3 +21,10 @@ export function maskPhone(e164: string | null | undefined): string {
   if (!e164) return "";
   return "+234 ••• ••• " + e164.slice(-4);
 }
+
+/** +2348031234567 → 0803 123 4567 (how people write numbers locally; safe in spreadsheets). */
+export function localPhone(e164: string | null | undefined): string {
+  if (!e164) return "";
+  const m = /^\+234(\d{3})(\d{3})(\d{4})$/.exec(e164);
+  return m ? `0${m[1]} ${m[2]} ${m[3]}` : e164;
+}

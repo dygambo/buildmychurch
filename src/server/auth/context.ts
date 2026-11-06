@@ -45,6 +45,8 @@ export const getCtx = cache(async (): Promise<Ctx | null> => {
     .where(and(eq(memberships.userId, s.userId), eq(memberships.status, "active")))
     .orderBy(asc(memberships.createdAt));
   if (!rows.length) return null;
+  // a temporary password must be replaced before anything else
+  if (rows[0]!.u.mustChangePassword) return null;
   const row = rows.find((r) => r.o.id === s.orgId) ?? rows[0]!;
   const perms = new Set(row.r.permissions as Permission[]);
   return {
@@ -78,6 +80,10 @@ export async function requireCtx(): Promise<Ctx> {
   const ctx = await getCtx();
   if (!ctx) {
     const s = await readSession();
+    if (s && !s.mfaPending) {
+      const [u] = await db.select({ must: users.mustChangePassword }).from(users).where(eq(users.id, s.userId));
+      if (u?.must) redirect("/change-password");
+    }
     redirect(s?.mfaPending ? "/sign-in/verify" : "/sign-in");
   }
   return ctx;
@@ -95,4 +101,17 @@ export async function userOrgs(userId: string) {
     .innerJoin(organisations, eq(organisations.id, memberships.orgId))
     .innerJoin(roles, eq(roles.id, memberships.roleId))
     .where(and(eq(memberships.userId, userId), eq(memberships.status, "active")));
+}
+
+/** Used for records created by the system itself (visitor cards, scheduled jobs), never by a signed-in person. */
+export const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000";
+
+export function systemActor(org: { id: string; name: string }, name: string, perms: Permission[]): Actor {
+  return makeActor({
+    user: { id: SYSTEM_USER_ID, name, email: "", mfaEnabled: false },
+    org: { id: org.id, name: org.name, slug: "", plan: "", smsSenderId: null, timezone: "Africa/Lagos" },
+    membership: { id: "", roleId: "", roleKey: "system", roleName: name, title: null, staffId: null, phone: null },
+    perms: new Set(perms),
+    branchIds: [],
+  });
 }

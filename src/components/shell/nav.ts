@@ -20,6 +20,7 @@ export const NAV: NavGroup[] = [
       { href: "/follow-up", label: "Follow-up", icon: "route", perm: "followup.manage" },
       { href: "/groups", label: "Groups & cells", icon: "groups", perm: ["groups.manage", "members.read"] },
       { href: "/care", label: "Prayer & care", icon: "heart", perm: "care.manage" },
+      { href: "/counselling", label: "Marriage counselling", icon: "rings", perm: ["counselling.manage", "counselling.oversee"] },
     ],
   },
   {

@@ -10,6 +10,7 @@ export function VerifyForm() {
   const { run, pending, fieldErrors } = useAction(verifyMfaAction, { onSuccess: (d) => router.replace(d.next) });
   return (
     <form
+      method="post"
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();

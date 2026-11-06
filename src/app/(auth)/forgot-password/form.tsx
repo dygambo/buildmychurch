@@ -18,6 +18,7 @@ export function ForgotForm() {
     );
   return (
     <form
+      method="post"
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
